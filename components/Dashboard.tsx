@@ -24,9 +24,10 @@ interface Props {
   today: string;
   refDate: string;
   settings: TaxSettings;
+  aiEnabled: boolean;
 }
 
-export function Dashboard({ summary, transactions, today, refDate, settings }: Props) {
+export function Dashboard({ summary, transactions, today, refDate, settings, aiEnabled }: Props) {
   const { period, range, current, previous, change, tax, taxYtd } = summary;
   const prev = shiftPeriod(period, refDate, -1).start;
   const next = shiftPeriod(period, refDate, 1).start;
@@ -117,7 +118,7 @@ export function Dashboard({ summary, transactions, today, refDate, settings }: P
         </p>
       </section>
 
-      <ReportPanel period={period} date={refDate} label={longLabel(period, range)} />
+      <ReportPanel period={period} date={refDate} label={longLabel(period, range)} aiEnabled={aiEnabled} />
 
       <section className="grid-2">
         <div className="card">

@@ -14,5 +14,5 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
   const summary = summarize(txs, period, ref, settings);
   const periodTxs = txs.filter((t) => t.date >= summary.range.start && t.date <= summary.range.end);
 
-  return <Dashboard summary={summary} transactions={periodTxs} today={today} refDate={ref} settings={settings} />;
+  return <Dashboard summary={summary} transactions={periodTxs} today={today} refDate={ref} settings={settings} aiEnabled={!!process.env.ANTHROPIC_API_KEY} />;
 }

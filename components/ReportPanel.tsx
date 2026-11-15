@@ -14,7 +14,7 @@ interface Report {
   content: string;
 }
 
-export function ReportPanel({ period, date, label }: { period: Period; date: string; label: string }) {
+export function ReportPanel({ period, date, label, aiEnabled }: { period: Period; date: string; label: string; aiEnabled: boolean }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
@@ -48,9 +48,12 @@ export function ReportPanel({ period, date, label }: { period: Period; date: str
     <section className="card">
       <div className="card-head">
         <div>
-          <h2>Report AI</h2>
+          <h2>
+            Report {!aiEnabled && <span className="badge">Automatico · gratuito</span>}
+          </h2>
           <p className="muted small">
-            Analisi {NAME[period]} di {label}, scritta da Claude a partire dai tuoi numeri. <Link href="/reports">Report salvati</Link>
+            Analisi {NAME[period]} di {label},{" "}
+            {aiEnabled ? "scritta da Claude a partire dai tuoi numeri." : "calcolata dai tuoi numeri senza AI. Con una chiave Anthropic la scriverà Claude."} <Link href="/reports">Report salvati</Link>
           </p>
         </div>
         <button className="btn btn-primary" onClick={generate} disabled={loading}>

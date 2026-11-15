@@ -10,6 +10,7 @@ Controller finanziario per freelance in **regime forfettario**: registri entrate
 - **Dashboard** per giorno, settimana (da lunedì) o mese, con navigazione tra i periodi: entrate, uscite, utile con la variazione rispetto al periodo precedente, grafico degli ultimi 6 periodi, uscite per categoria.
 - **Stima fiscale forfettario**: imponibile = incassi × coefficiente; contributi INPS sull'imponibile; imposta sostitutiva su (imponibile − contributi). Mostrata sia per il periodo sia da inizio anno. Parametri modificabili in *Impostazioni* (predefiniti: coefficiente 78%, INPS gestione separata 26,07%, imposta 15%).
 - **Report AI** (`/api/report`): il server calcola gli aggregati, li manda a Claude con un prompt da controller e salva il testo nella tabella `reports`. Il report si può copiare o scaricare in `.md`; lo storico è in *Report salvati*. Modello predefinito `claude-opus-5-5` (modificabile con `ANTHROPIC_MODEL`); se il modello declina la richiesta, l'API ripiega automaticamente su un modello di riserva.
+  - **Senza chiave Anthropic** l'app funziona lo stesso: il pulsante genera un *report automatico* gratuito, con le stesse sezioni, calcolato dai numeri con regole fisse. Basta aggiungere `ANTHROPIC_API_KEY` per passare al report scritto da Claude.
 
 - **App installabile (PWA)**: si installa dal browser con icona propria e finestra a tutto schermo.
   - Android / Chrome / Edge su PC: pulsante **⬇ Installa app** in alto, oppure menu del browser → *Installa app*.
@@ -48,7 +49,7 @@ supabase/migrations/     schema SQL con RLS
 
 1. **Supabase**: crea un progetto, poi apri *SQL Editor* ed esegui `supabase/migrations/0001_init.sql`.
    In *Authentication → URL Configuration* aggiungi `http://localhost:3000/auth/callback` (e poi l'URL di produzione) tra i Redirect URL.
-2. **Variabili d'ambiente**: copia `.env.example` in `.env.local` e compila URL e chiave anon di Supabase e la chiave `ANTHROPIC_API_KEY`.
+2. **Variabili d'ambiente**: copia `.env.example` in `.env.local` e compila URL e chiave anon di Supabase e, se vuoi il report scritto dall'AI, la chiave `ANTHROPIC_API_KEY` (facoltativa).
 3. Avvia:
    ```bash
    npm install

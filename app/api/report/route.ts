@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { fetchSettings, fetchTransactions } from "@/lib/data";
 import { dataRange, isIsoDate, PERIODS, summarize, todayRome, type Period } from "@/lib/finance";
-import { buildReportPrompt, REPORT_SYSTEM_PROMPT } from "@/lib/report";
+import { BASIC_MODEL, buildBasicReport, buildReportPrompt, REPORT_SYSTEM_PROMPT } from "@/lib/report";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -21,10 +21,6 @@ export async function POST(request: Request) {
   const period = (PERIODS as string[]).includes(body.period ?? "") ? (body.period as Period) : "mese";
   const date = body.date && isIsoDate(body.date) ? body.date : todayRome();
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ error: "ANTHROPIC_API_KEY non configurata sul server." }, { status: 500 });
-  }
-
   let txs, settings;
   try {
     [txs, settings] = await Promise.all([fetchTransactions(supabase, dataRange(period, date)), fetchSettings(supabase)]);
@@ -40,43 +36,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const client = new Anthropic();
   let content: string;
   let servedBy = MODEL;
-  try {
-    const message = await client.beta.messages
-      .stream({
-        model: MODEL,
-        max_tokens: 16000,
-        output_config: { effort: "medium" },
-        // Se il modello declina per i filtri di sicurezza, l'API riprova da sola su un modello di riserva.
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
-        system: REPORT_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: buildReportPrompt(summary, txs, settings) }],
-      })
-      .finalMessage();
-
-    if (message.stop_reason === "refusal") {
-      return NextResponse.json({ error: "Il modello non ha potuto generare il report. Riprova più tardi." }, { status: 502 });
-    }
-    servedBy = message.model;
-    content = message.content
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("")
-      .trim();
-    if (!content) throw new Error("Risposta vuota");
-  } catch (e) {
-    if (e instanceof Anthropic.AuthenticationError) {
-      return NextResponse.json({ error: "Chiave Anthropic non valida." }, { status: 500 });
-    }
-    if (e instanceof Anthropic.RateLimitError) {
-      return NextResponse.json({ error: "Troppe richieste: riprova tra qualche minuto." }, { status: 429 });
-    }
-    if (e instanceof Anthropic.APIError) {
-      return NextResponse.json({ error: `Errore dell'API Anthropic (${e.status ?? "rete"}).` }, { status: 502 });
-    }
-    return NextResponse.json({ error: `Errore nella generazione: ${(e as Error).message}` }, { status: 500 });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    // Senza chiave: report automatico a regole fisse, gratuito.
+    content = buildBasicReport(summary, txs);
+    servedBy = BASIC_MODEL;
+  } else {
+    const result = await generateWithClaude(buildReportPrompt(summary, txs, settings));
+    if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
+    content = result.content;
+    servedBy = result.model;
   }
 
   const { data: saved, error } = await supabase
@@ -88,12 +58,47 @@ export async function POST(request: Request) {
       content,
       model: servedBy,
     })
-    .select("id, period, period_start, period_end, content, created_at")
+    .select("id, period, period_start, period_end, content, model, created_at")
     .single();
 
   if (error) {
     // Il report c'è comunque: lo restituiamo anche se il salvataggio fallisce.
-    return NextResponse.json({ report: { id: null, period, period_start: summary.range.start, period_end: summary.range.end, content }, warning: `Report non salvato: ${error.message}` });
+    return NextResponse.json({ report: { id: null, period, period_start: summary.range.start, period_end: summary.range.end, content, model: servedBy }, warning: `Report non salvato: ${error.message}` });
   }
   return NextResponse.json({ report: saved });
+}
+
+type ClaudeResult = { content: string; model: string } | { error: string; status: number };
+
+async function generateWithClaude(prompt: string): Promise<ClaudeResult> {
+  const client = new Anthropic();
+  try {
+    const message = await client.beta.messages
+      .stream({
+        model: MODEL,
+        max_tokens: 16000,
+        output_config: { effort: "medium" },
+        // Se il modello declina per i filtri di sicurezza, l'API riprova da sola su un modello di riserva.
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        system: REPORT_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: prompt }],
+      })
+      .finalMessage();
+
+    if (message.stop_reason === "refusal") {
+      return { error: "Il modello non ha potuto generare il report. Riprova più tardi.", status: 502 };
+    }
+    const content = message.content
+      .map((b) => (b.type === "text" ? b.text : ""))
+      .join("")
+      .trim();
+    if (!content) return { error: "Il modello ha restituito una risposta vuota.", status: 502 };
+    return { content, model: message.model };
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) return { error: "Chiave Anthropic non valida.", status: 500 };
+    if (e instanceof Anthropic.RateLimitError) return { error: "Troppe richieste: riprova tra qualche minuto.", status: 429 };
+    if (e instanceof Anthropic.APIError) return { error: `Errore dell'API Anthropic (${e.status ?? "rete"}).`, status: 502 };
+    return { error: `Errore nella generazione: ${(e as Error).message}`, status: 500 };
+  }
 }
