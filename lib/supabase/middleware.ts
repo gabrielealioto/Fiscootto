@@ -1,13 +1,22 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { configErrorPage, missingEnv, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
 /** Rinnova la sessione a ogni richiesta e manda al login chi non è autenticato. */
 export async function updateSession(request: NextRequest) {
+  const missing = missingEnv();
+  if (missing.length) {
+    return new NextResponse(configErrorPage(missing), {
+      status: 500,
+      headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+
   let response = NextResponse.next({ request });
 
-  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -20,9 +29,15 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Se Supabase non risponde, la pagina di login deve comunque aprirsi.
+  let user = null;
+  try {
+    ({
+      data: { user },
+    } = await supabase.auth.getUser());
+  } catch (e) {
+    console.error("Supabase non raggiungibile dal middleware:", e);
+  }
 
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
