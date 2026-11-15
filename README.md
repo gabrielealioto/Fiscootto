@@ -1,2 +1,68 @@
 # Fiscootto
-Controller finanziario
+
+Controller finanziario per freelance in **regime forfettario**: registri entrate e uscite (a mano o importando il CSV della banca), vedi i numeri chiave e quanto accantonare per tasse e contributi, e con un clic ottieni un **report scritto dall'AI**: giornaliero, settimanale o mensile.
+
+## Funzioni
+
+- **Accesso con link via email** (Supabase Auth). Ogni utente vede solo i propri dati (Row Level Security).
+- **Movimenti**: inserimento rapido (data, importo, categoria, descrizione) ed eliminazione.
+- **Import CSV**: riconosce `data`, `descrizione`, `importo` (negativo = uscita) oppure le colonne separate `entrate`/`uscite`, più `categoria`. Accetta separatore `;` o `,`, importi nel formato italiano (`1.234,56`) e date `gg/mm/aaaa`. Salta le righe introduttive dell'estratto conto e i movimenti già importati, così si può ricaricare lo stesso file senza duplicati.
+- **Dashboard** per giorno, settimana (da lunedì) o mese, con navigazione tra i periodi: entrate, uscite, utile con la variazione rispetto al periodo precedente, grafico degli ultimi 6 periodi, uscite per categoria.
+- **Stima fiscale forfettario**: imponibile = incassi × coefficiente; contributi INPS sull'imponibile; imposta sostitutiva su (imponibile − contributi). Mostrata sia per il periodo sia da inizio anno. Parametri modificabili in *Impostazioni* (predefiniti: coefficiente 78%, INPS gestione separata 26,07%, imposta 15%).
+- **Report AI** (`/api/report`): il server calcola gli aggregati, li manda a Claude con un prompt da controller e salva il testo nella tabella `reports`. Il report si può copiare o scaricare in `.md`; lo storico è in *Report salvati*. Modello predefinito `claude-opus-5-5` (modificabile con `ANTHROPIC_MODEL`); se il modello declina la richiesta, l'API ripiega automaticamente su un modello di riserva.
+
+- **App installabile (PWA)**: si installa dal browser con icona propria e finestra a tutto schermo.
+  - Android / Chrome / Edge su PC: pulsante **⬇ Installa app** in alto, oppure menu del browser → *Installa app*.
+  - iPhone / iPad: Safari → *Condividi* → *Aggiungi alla schermata Home*.
+  - Senza rete mostra una pagina offline. In cache finiscono solo i file statici (JS, CSS, icone): pagine con dati finanziari e API non vengono mai salvate sul dispositivo, e all'uscita la cache viene svuotata.
+
+> Le stime fiscali sono indicative e non sostituiscono il commercialista.
+
+> L'installazione richiede HTTPS: funziona su `localhost` in sviluppo e sul dominio Vercel in produzione. Il service worker si attiva solo con `npm run build && npm start` o in produzione, non con `npm run dev`.
+
+## Stack
+
+Next.js 15 (App Router) · Supabase (Postgres + Auth) · Anthropic API · nessuna libreria grafica (SVG puro).
+
+```
+app/
+  page.tsx               dashboard
+  login/                 accesso con link email
+  auth/callback|signout  sessione
+  reports/               storico report
+  settings/              parametri forfettario
+  api/report/route.ts    generazione report con Claude
+components/              Dashboard, grafico, form, PWA (installazione), mini renderer Markdown
+public/                  service worker, pagina offline, icone
+app/manifest.ts          manifest della PWA
+lib/finance.ts           calcoli (periodi, aggregati, tasse, parser CSV) + test
+lib/report.ts            prompt del report + test
+lib/data.ts              lettura movimenti e impostazioni da Supabase
+lib/supabase/            client Supabase (server, browser, middleware)
+middleware.ts            rinnovo sessione e protezione delle pagine
+app/actions.ts           server action: movimenti, import CSV, impostazioni
+supabase/migrations/     schema SQL con RLS
+```
+
+## Avvio in locale
+
+1. **Supabase**: crea un progetto, poi apri *SQL Editor* ed esegui `supabase/migrations/0001_init.sql`.
+   In *Authentication → URL Configuration* aggiungi `http://localhost:3000/auth/callback` (e poi l'URL di produzione) tra i Redirect URL.
+2. **Variabili d'ambiente**: copia `.env.example` in `.env.local` e compila URL e chiave anon di Supabase e la chiave `ANTHROPIC_API_KEY`.
+3. Avvia:
+   ```bash
+   npm install
+   npm run dev     # http://localhost:3000
+   npm test        # test della logica di calcolo e del prompt
+   ```
+
+## Messa online (Vercel)
+
+Importa il repository GitHub su Vercel, aggiungi le stesse variabili d'ambiente e fai il deploy. Poi aggiungi `https://<tuo-dominio>/auth/callback` ai Redirect URL di Supabase.
+
+## Prossimi passi
+
+- Stripe: abbonamento con prova di 7 giorni e blocco dell'accesso per chi non paga.
+- Invio automatico del report via email (cron di Vercel + Resend).
+- Esportazione in PDF.
+- Categorie personalizzabili e regole di categorizzazione automatica per il CSV.
