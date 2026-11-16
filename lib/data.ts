@@ -22,15 +22,18 @@ export async function fetchTransactions(supabase: SupabaseClient, range: Range):
   return out;
 }
 
-export async function fetchSettings(supabase: SupabaseClient): Promise<TaxSettings> {
+export type UserSettings = TaxSettings & { ateco: string };
+
+export async function fetchSettings(supabase: SupabaseClient): Promise<UserSettings> {
   const { data } = await supabase
     .from("settings")
-    .select("coefficiente, aliquota_contributi, aliquota_imposta")
+    .select("coefficiente, aliquota_contributi, aliquota_imposta, ateco")
     .maybeSingle();
-  if (!data) return DEFAULT_SETTINGS;
+  if (!data) return { ...DEFAULT_SETTINGS, ateco: "" };
   return {
     coefficiente: Number(data.coefficiente),
     aliquota_contributi: Number(data.aliquota_contributi),
     aliquota_imposta: Number(data.aliquota_imposta),
+    ateco: data.ateco ?? "",
   };
 }

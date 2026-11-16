@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -21,7 +22,7 @@ export function ServiceWorkerRegister() {
 }
 
 /** Pulsante "Installa app": usa il prompt nativo dove esiste, istruzioni su iOS. */
-export function InstallButton() {
+export function InstallButton({ compact = false }: { compact?: boolean }) {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [ios, setIos] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -54,25 +55,29 @@ export function InstallButton() {
   if (deferred) {
     return (
       <button
-        className="btn btn-ghost btn-sm"
+        className={compact ? "btn btn-secondary btn-sm" : "btn btn-secondary btn-block"}
         onClick={async () => {
           await deferred.prompt();
           await deferred.userChoice;
           setDeferred(null);
         }}
       >
-        ⬇ Installa app
+        <Download size={16} /> {compact ? "Installa" : "Installa app"}
       </button>
     );
   }
 
   return (
     <div className="install-ios">
-      <button className="btn btn-ghost btn-sm" onClick={() => setShowHelp((v) => !v)} aria-expanded={showHelp}>
-        ⬇ Installa app
+      <button
+        className={compact ? "btn btn-secondary btn-sm" : "btn btn-secondary btn-block"}
+        onClick={() => setShowHelp((v) => !v)}
+        aria-expanded={showHelp}
+      >
+        <Download size={16} /> {compact ? "Installa" : "Installa app"}
       </button>
       {showHelp && (
-        <div className="popover" role="dialog">
+        <div className="popover" role="dialog" style={compact ? { top: "calc(100% + 8px)", bottom: "auto", left: "auto", right: 0 } : undefined}>
           In Safari tocca <strong>Condividi</strong> e poi <strong>Aggiungi alla schermata Home</strong>.
         </div>
       )}

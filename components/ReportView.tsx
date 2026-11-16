@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Copy, Download } from "lucide-react";
 import { useState } from "react";
 import { Markdown } from "./Markdown";
 
@@ -29,10 +30,10 @@ export function ReportView({ content, filename }: { content: string; filename: s
     <div className="report">
       <div className="report-actions">
         <button className="btn btn-ghost btn-sm" onClick={copy}>
-          {copied ? "Copiato ✓" : "Copia"}
+          {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copiato" : "Copia"}
         </button>
         <button className="btn btn-ghost btn-sm" onClick={download}>
-          Scarica .md
+          <Download size={15} /> Scarica .md
         </button>
       </div>
       <Markdown text={content} />
