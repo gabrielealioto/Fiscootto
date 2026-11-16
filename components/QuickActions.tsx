@@ -4,6 +4,7 @@ import { FileSpreadsheet, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CsvImport } from "./CsvImport";
 import { Sheet } from "./Sheet";
+import type { Regime } from "@/lib/ordinario";
 import { TransactionForm } from "./TransactionForm";
 
 const ADD = "fiscootto:add";
@@ -13,7 +14,7 @@ export const openAdd = () => window.dispatchEvent(new Event(ADD));
 export const openImport = () => window.dispatchEvent(new Event(IMPORT));
 
 /** Le due finestre globali (nuovo movimento, import CSV), apribili da ogni punto dell'app. */
-export function QuickActionsHost() {
+export function QuickActionsHost({ regime }: { regime: Regime }) {
   const [sheet, setSheet] = useState<"add" | "import" | null>(null);
 
   useEffect(() => {
@@ -31,10 +32,10 @@ export function QuickActionsHost() {
   return (
     <>
       <Sheet open={sheet === "add"} onClose={close} title="Nuovo movimento">
-        <TransactionForm onDone={close} />
+        <TransactionForm onDone={close} regime={regime} />
       </Sheet>
       <Sheet open={sheet === "import"} onClose={close} title="Importa dalla banca">
-        <CsvImport onDone={close} />
+        <CsvImport onDone={close} regime={regime} />
       </Sheet>
     </>
   );

@@ -23,7 +23,40 @@ export default async function SettingsPage() {
             </span>
             <h2>Come calcolo le tasse</h2>
           </div>
-          <ol className="formula">
+          {settings.regime === "ordinario" ? (
+            <>
+              <ol className="formula">
+                <li>
+                  <span>
+                    <strong style={{ color: "var(--fg)" }}>Reddito</strong> = incassi senza IVA − spese deducibili (ogni categoria con il suo
+                    limite: materiali e merci 100%, telefono 80%, vitto e alloggio 75%, auto 20%).
+                  </span>
+                </li>
+                <li>
+                  <span>
+                    <strong style={{ color: "var(--fg)" }}>Contributi INPS</strong> sul reddito, secondo la tua gestione.
+                  </span>
+                </li>
+                <li>
+                  <span>
+                    <strong style={{ color: "var(--fg)" }}>IRPEF</strong> a scaglioni e <strong style={{ color: "var(--fg)" }}>addizionali</strong>{" "}
+                    su reddito − contributi.
+                  </span>
+                </li>
+                <li>
+                  <span>
+                    <strong style={{ color: "var(--fg)" }}>IVA da versare</strong> = IVA sulle vendite − IVA detraibile sugli acquisti.
+                  </span>
+                </li>
+              </ol>
+              <p className="small muted">
+                Stima per decidere quanto mettere da parte: non considera detrazioni personali, crediti d&apos;imposta, rimanenze di magazzino
+                né acconti già versati. Le spese si deducono quando le paghi (principio di cassa). Verifica sempre con il commercialista.
+              </p>
+            </>
+          ) : (
+            <>
+              <ol className="formula">
             <li>
               <span>
                 <strong style={{ color: "var(--fg)" }}>Imponibile</strong> = incassi × coefficiente di redditività.
@@ -44,6 +77,8 @@ export default async function SettingsPage() {
             Nel forfettario le spese non riducono le tasse: contano solo gli incassi. I contributi fissi sono ripartiti sui giorni dell&apos;anno, così ogni periodo accantona la sua parte. I contributi in realtà si
             deducono nell&apos;anno in cui li paghi: la stima serve per decidere quanto mettere da parte, non per la dichiarazione. Verifica sempre con il commercialista.
           </p>
+            </>
+          )}
         </aside>
       </div>
     </div>
