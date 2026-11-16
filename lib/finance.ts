@@ -1,3 +1,5 @@
+import { fixedContributionsYear, variableContributions, type Gestione } from "./inps";
+
 // Logica pura (nessuna dipendenza da Next o Supabase): periodi, aggregati,
 // stima fiscale del regime forfettario e parser CSV. Testata in finance.test.ts.
 
@@ -19,12 +21,16 @@ export interface TaxSettings {
   coefficiente: number; // es. 0.78
   aliquota_contributi: number; // es. 0.2607
   aliquota_imposta: number; // 0.15 oppure 0.05
+  gestione?: Gestione; // predefinita: Gestione Separata
+  riduzione_35?: boolean; // riduzione contributiva per forfettari artigiani e commercianti
 }
 
 export const DEFAULT_SETTINGS: TaxSettings = {
   coefficiente: 0.78,
   aliquota_contributi: 0.2607,
   aliquota_imposta: 0.15,
+  gestione: "separata",
+  riduzione_35: false,
 };
 
 export const CATEGORIES: Record<Kind, string[]> = {
@@ -215,6 +221,11 @@ export function summarize(txs: Transaction[], period: Period, ref: string, setti
   const previous = totals(txs, previousRange);
   const yearStart = `${range.end.slice(0, 4)}-01-01`;
   const ytd = totals(txs, { start: yearStart, end: range.end });
+  const year = Number(yearStart.slice(0, 4));
+  const daysInYear = daysIn({ start: yearStart, end: `${year}-12-31` });
+  // Parte del periodo che cade nell'anno fiscale (una settimana può iniziare a dicembre).
+  const periodInYear: Range = { start: range.start < yearStart ? yearStart : range.start, end: range.end };
+  const incassiPrima = periodInYear.start > yearStart ? totals(txs, { start: yearStart, end: addDays(periodInYear.start, -1) }).entrate : 0;
   return {
     period,
     range,
@@ -233,8 +244,12 @@ export function summarize(txs: Transaction[], period: Period, ref: string, setti
     })),
     categories: byCategory(txs, range, "uscita"),
     incomeCategories: byCategory(txs, range, "entrata"),
-    tax: estimateTax(current.entrate, settings),
-    taxYtd: { ...estimateTax(ytd.entrate, settings), yearStart, incassi: ytd.entrate },
+    tax: estimateTaxRange(incassiPrima, current.entrate, daysIn(periodInYear) / daysInYear, settings),
+    taxYtd: {
+      ...estimateTaxRange(0, ytd.entrate, daysIn({ start: yearStart, end: range.end }) / daysInYear, settings),
+      yearStart,
+      incassi: ytd.entrate,
+    },
   };
 }
 
@@ -242,33 +257,55 @@ export function summarize(txs: Transaction[], period: Period, ref: string, setti
 
 export interface TaxEstimate {
   imponibile: number;
-  contributi: number;
+  contributi: number; // totale contributi INPS (fissi + in percentuale)
+  contributiFissi: number; // quota dei contributi fissi (artigiani e commercianti)
   imposta: number;
   totale: number; // da accantonare
   quotaSuIncassi: number; // % degli incassi da accantonare (0..1)
 }
 
 /**
- * Stima semplificata:
+ * Stima per il regime forfettario:
  *  imponibile = incassi × coefficiente di redditività
- *  contributi = imponibile × aliquota INPS
+ *  contributi = quanto la gestione INPS chiede su quell'imponibile (vedi lib/inps.ts):
+ *               in percentuale (con massimale) e, per artigiani e commercianti,
+ *               contributi fissi sul minimale e aliquota sull'eccedenza
  *  imposta    = (imponibile − contributi) × aliquota sostitutiva
  * Nella realtà i contributi si deducono per cassa nell'anno in cui si pagano:
  * è una stima prudenziale per l'accantonamento, non un calcolo dichiarativo.
  */
 export function estimateTax(incassi: number, s: TaxSettings): TaxEstimate {
+  return estimateTaxRange(0, incassi, 1, s);
+}
+
+/**
+ * Stima per un periodo dentro l'anno fiscale.
+ * - incassiPrima: incassi dell'anno prima dell'inizio del periodo (servono per minimale, soglie e massimale)
+ * - incassi: incassi del periodo
+ * - quotaAnno: frazione dell'anno coperta dal periodo, per ripartire i contributi fissi
+ */
+export function estimateTaxRange(incassiPrima: number, incassi: number, quotaAnno: number, s: TaxSettings): TaxEstimate {
+  const prima = Math.max(0, incassiPrima) * s.coefficiente;
   const base = Math.max(0, incassi);
   const imponibile = base * s.coefficiente;
-  const contributi = imponibile * s.aliquota_contributi;
+  const variabili = variableContributions(prima + imponibile, s) - variableContributions(prima, s);
+  const fissi = fixedContributionsYear(s) * Math.min(1, Math.max(0, quotaAnno));
+  const contributi = variabili + fissi;
   const imposta = Math.max(0, imponibile - contributi) * s.aliquota_imposta;
   const totale = contributi + imposta;
   return {
     imponibile: round2(imponibile),
     contributi: round2(contributi),
+    contributiFissi: round2(fissi),
     imposta: round2(imposta),
     totale: round2(totale),
     quotaSuIncassi: base > 0 ? totale / base : 0,
   };
+}
+
+/** Giorni dell'intervallo (estremi inclusi). */
+export function daysIn(r: Range): number {
+  return Math.round((toDate(r.end).getTime() - toDate(r.start).getTime()) / 86_400_000) + 1;
 }
 
 // ─── Parser CSV ────────────────────────────────────────────────

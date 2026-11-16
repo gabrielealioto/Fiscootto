@@ -1,3 +1,4 @@
+import { GESTIONE_INFO } from "./inps";
 import {
   byCategory,
   formatEur,
@@ -15,7 +16,8 @@ Scrivi report brevi, concreti e leggibili da chi non è un esperto di contabilit
 
 Regole:
 - Usa solo i numeri forniti nei dati. Non inventare cifre, clienti o scadenze. Se un dato manca, dillo.
-- Nel forfettario i costi NON riducono le tasse: imposta e contributi dipendono solo dagli incassi.
+- Nel forfettario i costi NON riducono le tasse: imposta e contributi dipendono solo dagli incassi
+  (artigiani e commercianti pagano anche contributi fissi, dovuti anche senza incassi).
   Le uscite contano per l'utile reale e la liquidità, non per il fisco.
 - Le stime fiscali sono indicative: ricordalo in una riga, senza ripeterlo più volte.
 - Tono diretto, da consulente. Niente frasi di circostanza, niente emoji.
@@ -81,12 +83,12 @@ export function buildReportPrompt(summary: PeriodSummary, txs: Transaction[], se
   const pct = (n: number) => `${(n * 100).toLocaleString("it-IT", { maximumFractionDigits: 2 })}%`;
   lines.push("## Parametri fiscali");
   lines.push(
-    `- Coefficiente di redditività ${pct(settings.coefficiente)} · contributi INPS ${pct(settings.aliquota_contributi)} · imposta sostitutiva ${pct(settings.aliquota_imposta)}`,
+    `- Coefficiente di redditività ${pct(settings.coefficiente)} · previdenza: ${GESTIONE_INFO[settings.gestione ?? "separata"].label}, aliquota ${pct(settings.aliquota_contributi)}${settings.riduzione_35 ? " con riduzione del 35%" : ""} · imposta sostitutiva ${pct(settings.aliquota_imposta)}`,
   );
   lines.push("");
   lines.push("## Stima fiscale del periodo (sugli incassi del periodo)");
   lines.push(
-    `- Imponibile ${formatEur(tax.imponibile)} · contributi ${formatEur(tax.contributi)} · imposta ${formatEur(tax.imposta)} · da accantonare ${formatEur(tax.totale)} (${pct(tax.quotaSuIncassi)} degli incassi)`,
+    `- Imponibile ${formatEur(tax.imponibile)} · contributi ${formatEur(tax.contributi)}${tax.contributiFissi > 0 ? ` (di cui fissi ${formatEur(tax.contributiFissi)})` : ""} · imposta ${formatEur(tax.imposta)} · da accantonare ${formatEur(tax.totale)} (${pct(tax.quotaSuIncassi)} degli incassi)`,
   );
   lines.push(`## Stima fiscale da inizio anno (${taxYtd.yearStart} → ${range.end})`);
   lines.push(
@@ -188,6 +190,7 @@ export function buildBasicReport(summary: PeriodSummary, txs: Transaction[]): st
   // Tasse
   out.push("## Tasse e contributi");
   out.push(`- Per questo periodo metti da parte circa **${eur(tax.totale)}**: ${eur(tax.contributi)} di contributi INPS e ${eur(tax.imposta)} di imposta sostitutiva.`);
+  if (tax.contributiFissi > 0) out.push(`- Nei contributi c'è la quota del periodo dei contributi fissi (${eur(tax.contributiFissi)}), dovuti anche senza incassi.`);
   out.push(`- Da inizio anno, su ${eur(taxYtd.incassi)} di incassi, il totale da accantonare è circa **${eur(taxYtd.totale)}**.`);
   out.push("- Nel forfettario le spese non riducono le tasse: contano solo gli incassi. Le stime sono indicative.");
   out.push("");

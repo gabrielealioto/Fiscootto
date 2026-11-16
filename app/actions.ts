@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { fetchTransactions } from "@/lib/data";
 import { atecoDigits, formatAteco } from "@/lib/ateco";
+import { GESTIONI, hasFixedContributions, type Gestione } from "@/lib/inps";
 import { dedupeKey, isIsoDate, round2, type Kind, type ParsedRow } from "@/lib/finance";
 import { createClient } from "@/lib/supabase/server";
 
@@ -118,6 +119,10 @@ export async function saveSettings(_prev: ActionState, form: FormData): Promise<
     return { ok: false, message: "Codice ATECO non valido: usa il formato 62.01.00." };
   }
   const ateco = digits ? formatAteco(digits) : "";
+  const gestioneRaw = String(form.get("gestione") ?? "separata");
+  if (!(GESTIONI as string[]).includes(gestioneRaw)) return { ok: false, message: "Gestione previdenziale non valida." };
+  const gestione = gestioneRaw as Gestione;
+  const riduzione_35 = hasFixedContributions(gestione) && form.get("riduzione_35") === "on";
 
   const {
     data: { user },
@@ -128,6 +133,8 @@ export async function saveSettings(_prev: ActionState, form: FormData): Promise<
     aliquota_contributi: round4(aliquota_contributi),
     aliquota_imposta: round4(aliquota_imposta),
     ateco,
+    gestione,
+    riduzione_35,
     updated_at: new Date().toISOString(),
   });
   if (error) return { ok: false, message: error.message };
