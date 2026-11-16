@@ -53,6 +53,7 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                         {isIn ? "Entrata" : "Uscita"}
                       </span>{" "}
                       · {t.category}
+                      {(t.iva ?? 0) > 0 && ` · IVA ${t.iva}%`}
                     </div>
                   </div>
                   <span className="tx-amount" style={{ color: "var(--fg)" }}>

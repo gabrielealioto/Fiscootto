@@ -11,14 +11,16 @@ import {
   inRange,
 } from "./finance";
 
-export const REPORT_SYSTEM_PROMPT = `Sei il controller finanziario di un freelance italiano in regime forfettario.
+export const REPORT_SYSTEM_PROMPT = `Sei il controller finanziario di un freelance italiano con partita IVA (il regime fiscale è indicato nei dati).
 Scrivi report brevi, concreti e leggibili da chi non è un esperto di contabilità.
 
 Regole:
 - Usa solo i numeri forniti nei dati. Non inventare cifre, clienti o scadenze. Se un dato manca, dillo.
-- Nel forfettario i costi NON riducono le tasse: imposta e contributi dipendono solo dagli incassi
-  (artigiani e commercianti pagano anche contributi fissi, dovuti anche senza incassi).
-  Le uscite contano per l'utile reale e la liquidità, non per il fisco.
+- Regime forfettario: i costi NON riducono le tasse, imposta e contributi dipendono solo dagli incassi;
+  le uscite contano per l'utile reale e la liquidità, non per il fisco.
+- Regime ordinario: le spese deducibili (materiali, merci per la rivendita, ecc.) riducono reddito, contributi e IRPEF;
+  l'IVA incassata non è un guadagno, va versata al netto di quella detraibile sugli acquisti.
+- Artigiani e commercianti pagano anche contributi fissi, dovuti anche senza incassi.
 - Le stime fiscali sono indicative: ricordalo in una riga, senza ripeterlo più volte.
 - Tono diretto, da consulente. Niente frasi di circostanza, niente emoji.
 - Formato Markdown con queste sezioni, in quest'ordine:
@@ -81,19 +83,32 @@ export function buildReportPrompt(summary: PeriodSummary, txs: Transaction[], se
   lines.push("");
 
   const pct = (n: number) => `${(n * 100).toLocaleString("it-IT", { maximumFractionDigits: 2 })}%`;
+  const previdenza = `previdenza: ${GESTIONE_INFO[settings.gestione ?? "separata"].label}, aliquota ${pct(settings.aliquota_contributi)}${settings.riduzione_35 ? " con riduzione del 35%" : ""}`;
+  const fissi = (t: typeof tax) => (t.contributiFissi > 0 ? ` (di cui fissi ${formatEur(t.contributiFissi)})` : "");
   lines.push("## Parametri fiscali");
-  lines.push(
-    `- Coefficiente di redditività ${pct(settings.coefficiente)} · previdenza: ${GESTIONE_INFO[settings.gestione ?? "separata"].label}, aliquota ${pct(settings.aliquota_contributi)}${settings.riduzione_35 ? " con riduzione del 35%" : ""} · imposta sostitutiva ${pct(settings.aliquota_imposta)}`,
-  );
-  lines.push("");
-  lines.push("## Stima fiscale del periodo (sugli incassi del periodo)");
-  lines.push(
-    `- Imponibile ${formatEur(tax.imponibile)} · contributi ${formatEur(tax.contributi)}${tax.contributiFissi > 0 ? ` (di cui fissi ${formatEur(tax.contributiFissi)})` : ""} · imposta ${formatEur(tax.imposta)} · da accantonare ${formatEur(tax.totale)} (${pct(tax.quotaSuIncassi)} degli incassi)`,
-  );
-  lines.push(`## Stima fiscale da inizio anno (${taxYtd.yearStart} → ${range.end})`);
-  lines.push(
-    `- Incassi ${formatEur(taxYtd.incassi)} · imponibile ${formatEur(taxYtd.imponibile)} · contributi ${formatEur(taxYtd.contributi)} · imposta ${formatEur(taxYtd.imposta)} · da accantonare ${formatEur(taxYtd.totale)}`,
-  );
+  if (tax.regime === "ordinario") {
+    lines.push(`- Regime ordinario/semplificato · ${previdenza} · IRPEF 2026 a scaglioni (23% / 33% / 43%) · addizionali ${pct((settings.addizionale_regionale ?? 0) + (settings.addizionale_comunale ?? 0))}`);
+    lines.push("");
+    lines.push("## Stima fiscale del periodo");
+    lines.push(
+      `- Ricavi senza IVA ${formatEur(tax.ricavi)} · spese deducibili ${formatEur(tax.costiDeducibili)} · contributi ${formatEur(tax.contributi)}${fissi(tax)} · IRPEF ${formatEur(tax.irpef)} · addizionali ${formatEur(tax.addizionali)} · IVA da versare ${formatEur(tax.iva)} · da accantonare ${formatEur(tax.totale)} (${pct(tax.quotaSuIncassi)} degli incassi)`,
+    );
+    lines.push(`## Stima fiscale da inizio anno (${taxYtd.yearStart} → ${range.end})`);
+    lines.push(
+      `- Ricavi ${formatEur(taxYtd.ricavi)} · spese deducibili ${formatEur(taxYtd.costiDeducibili)} · contributi ${formatEur(taxYtd.contributi)} · IRPEF e addizionali ${formatEur(taxYtd.imposta)} · IVA ${formatEur(taxYtd.iva)} · da accantonare ${formatEur(taxYtd.totale)}`,
+    );
+  } else {
+    lines.push(`- Regime forfettario · coefficiente di redditività ${pct(settings.coefficiente)} · ${previdenza} · imposta sostitutiva ${pct(settings.aliquota_imposta)}`);
+    lines.push("");
+    lines.push("## Stima fiscale del periodo (sugli incassi del periodo)");
+    lines.push(
+      `- Imponibile ${formatEur(tax.imponibile)} · contributi ${formatEur(tax.contributi)}${fissi(tax)} · imposta ${formatEur(tax.imposta)} · da accantonare ${formatEur(tax.totale)} (${pct(tax.quotaSuIncassi)} degli incassi)`,
+    );
+    lines.push(`## Stima fiscale da inizio anno (${taxYtd.yearStart} → ${range.end})`);
+    lines.push(
+      `- Incassi ${formatEur(taxYtd.incassi)} · imponibile ${formatEur(taxYtd.imponibile)} · contributi ${formatEur(taxYtd.contributi)} · imposta ${formatEur(taxYtd.imposta)} · da accantonare ${formatEur(taxYtd.totale)}`,
+    );
+  }
   lines.push("");
   lines.push(`Scrivi ora il report ${PERIOD_NAME[period]}.`);
   return lines.join("\n");
@@ -189,10 +204,22 @@ export function buildBasicReport(summary: PeriodSummary, txs: Transaction[]): st
 
   // Tasse
   out.push("## Tasse e contributi");
-  out.push(`- Per questo periodo metti da parte circa **${eur(tax.totale)}**: ${eur(tax.contributi)} di contributi INPS e ${eur(tax.imposta)} di imposta sostitutiva.`);
+  if (tax.regime === "ordinario") {
+    out.push(
+      `- Per questo periodo metti da parte circa **${eur(tax.totale)}**: ${eur(tax.contributi)} di contributi INPS, ${eur(tax.irpef)} di IRPEF, ${eur(tax.addizionali)} di addizionali${tax.iva > 0 ? ` e ${eur(tax.iva)} di IVA da versare` : ""}.`,
+    );
+    out.push(`- Le spese deducibili del periodo (${eur(tax.costiDeducibili)}) hanno ridotto il reddito tassabile.`);
+    if (tax.iva < 0) out.push(`- L'IVA sugli acquisti supera quella sulle vendite: ${eur(Math.abs(tax.iva))} a credito.`);
+  } else {
+    out.push(`- Per questo periodo metti da parte circa **${eur(tax.totale)}**: ${eur(tax.contributi)} di contributi INPS e ${eur(tax.imposta)} di imposta sostitutiva.`);
+  }
   if (tax.contributiFissi > 0) out.push(`- Nei contributi c'è la quota del periodo dei contributi fissi (${eur(tax.contributiFissi)}), dovuti anche senza incassi.`);
   out.push(`- Da inizio anno, su ${eur(taxYtd.incassi)} di incassi, il totale da accantonare è circa **${eur(taxYtd.totale)}**.`);
-  out.push("- Nel forfettario le spese non riducono le tasse: contano solo gli incassi. Le stime sono indicative.");
+  out.push(
+    tax.regime === "ordinario"
+      ? "- Stima indicativa: IRPEF senza detrazioni personali, addizionali con aliquota unica."
+      : "- Nel forfettario le spese non riducono le tasse: contano solo gli incassi. Le stime sono indicative.",
+  );
   out.push("");
 
   // Azioni

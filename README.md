@@ -10,6 +10,7 @@ Controller finanziario per freelance in **regime forfettario**: registri entrate
 - **Dashboard** per giorno, settimana (da lunedì) o mese, con navigazione tra i periodi. Ogni voce ha un colore fisso in tutta l'app (entrate blu, uscite arancio, profitti verde acqua, tasse magenta, scelti per essere distinguibili anche da chi è daltonico): entrate, uscite, utile con la variazione rispetto al periodo precedente, grafico degli ultimi 6 periodi, uscite per categoria.
 - **Codice ATECO**: inserito in *Impostazioni*, imposta da solo il coefficiente di redditività secondo la tabella del forfettario (per i codici del commercio, cambiati con ATECO 2025, chiede di scegliere il gruppo). Il coefficiente resta modificabile.
 - **Previdenza INPS (valori 2026)**: Gestione Separata (26,07%, oppure 24% per pensionati o iscritti ad altra previdenza, massimale 122.295 €), Artigiani e Commercianti (contributi fissi sul minimale di 18.808 €, 24% / 24,48% sull'eccedenza, 25% / 25,48% oltre 56.224 €, riduzione del 35% per i forfettari), cassa professionale con aliquota libera. I contributi fissi sono ripartiti sui giorni dell'anno. Fonti: circolari INPS n. 8 e n. 14 del 2026.
+- **Regime ordinario o semplificato** (in alternativa al forfettario): ogni movimento ha la sua aliquota IVA (22/10/5/4%/esente, proposta per categoria); le spese si deducono con i limiti di legge (materiali e prodotti di consumo e merci per la rivendita 100%, telefono 80%, vitto e alloggio 75%, auto 20% con IVA al 40%, beni strumentali oltre 516,46 € con ammortamento al 20%); la stima comprende contributi INPS sul reddito, IRPEF 2026 a scaglioni (23% / 33% / 43%), addizionali regionale e comunale e IVA da versare. Niente detrazioni personali né rimanenze: è una stima per l'accantonamento.
 - **Stima fiscale forfettario**: imponibile = incassi × coefficiente; contributi INPS secondo la gestione; imposta sostitutiva su (imponibile − contributi). Mostrata sia per il periodo sia da inizio anno. Parametri modificabili in *Impostazioni* (predefiniti: coefficiente 78%, INPS gestione separata 26,07%, imposta 15%).
 - **Report AI** (`/api/report`): il server calcola gli aggregati, li manda a Claude con un prompt da controller e salva il testo nella tabella `reports`. Il report si può copiare o scaricare in `.md`; lo storico è in *Report salvati*. Modello predefinito `claude-opus-5-5` (modificabile con `ANTHROPIC_MODEL`); se il modello declina la richiesta, l'API ripiega automaticamente su un modello di riserva.
   - **Senza chiave Anthropic** l'app funziona lo stesso: il pulsante genera un *report automatico* gratuito, con le stesse sezioni, calcolato dai numeri con regole fisse. Basta aggiungere `ANTHROPIC_API_KEY` per passare al report scritto da Claude.
@@ -41,6 +42,7 @@ app/manifest.ts          manifest della PWA
 lib/finance.ts           calcoli (periodi, aggregati, tasse, parser CSV) + test
 lib/ateco.ts             codice ATECO → coefficiente di redditività + test
 lib/inps.ts              gestioni INPS 2026 e calcolo dei contributi + test
+lib/ordinario.ts         regime ordinario: IVA, deducibilità, IRPEF 2026 + test
 lib/report.ts            prompt del report + test
 lib/data.ts              lettura movimenti e impostazioni da Supabase
 lib/supabase/            client Supabase (server, browser, middleware)
@@ -51,7 +53,7 @@ supabase/migrations/     schema SQL con RLS
 
 ## Avvio in locale
 
-1. **Supabase**: crea un progetto, poi apri *SQL Editor* ed esegui in ordine i file di `supabase/migrations/` (`0001_init.sql`, `0002_ateco.sql`, `0003_gestione_inps.sql`).
+1. **Supabase**: crea un progetto, poi apri *SQL Editor* ed esegui in ordine i file di `supabase/migrations/` (`0001_init.sql`, `0002_ateco.sql`, `0003_gestione_inps.sql`, `0004_regime_ordinario.sql`).
    In *Authentication → URL Configuration* aggiungi `http://localhost:3000/auth/callback` (e poi l'URL di produzione) tra i Redirect URL.
 2. **Variabili d'ambiente**: copia `.env.example` in `.env.local` e compila URL e chiave anon di Supabase e, se vuoi il report scritto dall'AI, la chiave `ANTHROPIC_API_KEY` (facoltativa).
 3. Avvia:

@@ -5,6 +5,7 @@ import { Logo } from "@/components/Logo";
 import { SidebarNav, TabBar } from "@/components/Nav";
 import { InstallButton, ServiceWorkerRegister } from "@/components/Pwa";
 import { QuickActionsHost } from "@/components/QuickActions";
+import { fetchSettings } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
 
@@ -35,6 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const regime = user ? (await fetchSettings(supabase)).regime ?? "forfettario" : "forfettario";
 
   return (
     <html lang="it">
@@ -74,7 +76,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {children}
             </main>
             <TabBar />
-            <QuickActionsHost />
+            <QuickActionsHost regime={regime} />
           </div>
         ) : (
           children

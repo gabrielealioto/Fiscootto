@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { fetchTransactions } from "@/lib/data";
 import { atecoDigits, formatAteco } from "@/lib/ateco";
+import { fetchSettings } from "@/lib/data";
 import { GESTIONI, hasFixedContributions, type Gestione } from "@/lib/inps";
+import { costRule, incomeIva, IVA_RATES } from "@/lib/ordinario";
 import { dedupeKey, isIsoDate, round2, type Kind, type ParsedRow } from "@/lib/finance";
 import { createClient } from "@/lib/supabase/server";
 
@@ -21,6 +23,14 @@ async function requireUser() {
   if (!user) redirect("/login");
   return supabase;
 }
+
+type Row = ParsedRow & { iva: number };
+
+const validIva = (v: unknown) => ((IVA_RATES as readonly number[]).includes(Number(v)) ? Number(v) : null);
+
+/** IVA proposta per categoria (regime ordinario); nel forfettario sempre 0. */
+const defaultIva = (kind: Kind, category: string, ordinario: boolean) =>
+  !ordinario ? 0 : kind === "entrata" ? incomeIva(category) : costRule(category).ivaPredefinita;
 
 function cleanRow(r: Partial<ParsedRow>): ParsedRow | null {
   const kind = r.kind === "entrata" || r.kind === "uscita" ? (r.kind as Kind) : null;
@@ -40,14 +50,18 @@ export async function addTransaction(_prev: ActionState, form: FormData): Promis
   const raw = String(form.get("amount") ?? "").replace(/\s/g, "");
   // Accetta sia "12,50" sia "12.50" e "1.234,56".
   const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
-  const row = cleanRow({
+  const clean = cleanRow({
     date: String(form.get("date") ?? ""),
     kind: String(form.get("kind") ?? "") as Kind,
     amount: Number(normalized),
     category: String(form.get("category") ?? ""),
     description: String(form.get("description") ?? ""),
   });
-  if (!row) return { ok: false, message: "Controlla data e importo (maggiore di zero)." };
+  if (!clean) return { ok: false, message: "Controlla data e importo (maggiore di zero)." };
+  const { regime } = await fetchSettings(supabase);
+  const ordinario = regime === "ordinario";
+  const iva = ordinario ? (validIva(form.get("iva")) ?? defaultIva(clean.kind, clean.category, true)) : 0;
+  const row: Row = { ...clean, iva };
 
   const { error } = await supabase.from("transactions").insert(row);
   if (error) return { ok: false, message: error.message };
@@ -68,7 +82,13 @@ export async function importTransactions(rows: ParsedRow[]): Promise<ActionState
   if (!Array.isArray(rows) || rows.length === 0) return { ok: false, message: "Nessuna riga da importare." };
   if (rows.length > MAX_IMPORT) return { ok: false, message: `Massimo ${MAX_IMPORT} righe per import.` };
 
-  const clean = rows.map(cleanRow).filter((r): r is ParsedRow => r !== null);
+  const { regime } = await fetchSettings(supabase);
+  const ordinario = regime === "ordinario";
+  // Il CSV della banca non dice l'IVA: nel regime ordinario si propone quella tipica della categoria.
+  const clean: Row[] = rows
+    .map(cleanRow)
+    .filter((r): r is ParsedRow => r !== null)
+    .map((r) => ({ ...r, iva: defaultIva(r.kind, r.category, ordinario) }));
   if (clean.length === 0) return { ok: false, message: "Nessuna riga valida." };
 
   // Salta i movimenti già presenti (stessa data, tipo, importo e descrizione):
@@ -122,7 +142,13 @@ export async function saveSettings(_prev: ActionState, form: FormData): Promise<
   const gestioneRaw = String(form.get("gestione") ?? "separata");
   if (!(GESTIONI as string[]).includes(gestioneRaw)) return { ok: false, message: "Gestione previdenziale non valida." };
   const gestione = gestioneRaw as Gestione;
-  const riduzione_35 = hasFixedContributions(gestione) && form.get("riduzione_35") === "on";
+  const regime = form.get("regime") === "ordinario" ? "ordinario" : "forfettario";
+  // La riduzione del 35% è riservata ai forfettari.
+  const riduzione_35 = regime === "forfettario" && hasFixedContributions(gestione) && form.get("riduzione_35") === "on";
+  const addizionale_regionale = form.has("addizionale_regionale") ? pct("addizionale_regionale") : 0.0123;
+  const addizionale_comunale = form.has("addizionale_comunale") ? pct("addizionale_comunale") : 0.008;
+  if (!(addizionale_regionale >= 0 && addizionale_regionale <= 0.05)) return { ok: false, message: "Addizionale regionale tra 0 e 5%." };
+  if (!(addizionale_comunale >= 0 && addizionale_comunale <= 0.02)) return { ok: false, message: "Addizionale comunale tra 0 e 2%." };
 
   const {
     data: { user },
@@ -135,6 +161,9 @@ export async function saveSettings(_prev: ActionState, form: FormData): Promise<
     ateco,
     gestione,
     riduzione_35,
+    regime,
+    addizionale_regionale: round4(addizionale_regionale),
+    addizionale_comunale: round4(addizionale_comunale),
     updated_at: new Date().toISOString(),
   });
   if (error) return { ok: false, message: error.message };

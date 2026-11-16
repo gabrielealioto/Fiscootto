@@ -68,10 +68,19 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
 
   // Dove vanno gli incassi: quanto resta e quanto va in contributi e imposta.
   const resta = Math.max(0, current.entrate - tax.totale);
+  const ordinario = tax.regime === "ordinario";
+  const ivaDaVersare = Math.max(0, tax.iva);
   const parts = [
     { key: "net", cls: "p-net", label: "Resta a te", value: resta, color: "var(--c-profit)" },
     { key: "inps", cls: "p-inps", label: tax.contributiFissi > 0 ? "Contributi INPS (con i fissi)" : "Contributi INPS", value: tax.contributi, color: "var(--c-tax)" },
-    { key: "tax", cls: "p-tax", label: "Imposta sostitutiva", value: tax.imposta, color: "var(--c-tax-2)" },
+    {
+      key: "tax",
+      cls: "p-tax",
+      label: ordinario ? "IRPEF e addizionali" : "Imposta sostitutiva",
+      value: tax.imposta,
+      color: "var(--c-tax-2)",
+    },
+    ...(ordinario ? [{ key: "iva", cls: "p-iva", label: "IVA da versare", value: ivaDaVersare, color: "var(--c-iva)" }] : []),
   ];
   const share = (v: number) => (current.entrate > 0 ? v / current.entrate : 0);
 
@@ -152,13 +161,14 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
               <span className="kchip">
                 <PiggyBank size={19} />
               </span>
-              Tasse da accantonare
+              {ordinario ? "Tasse e IVA da accantonare" : "Tasse da accantonare"}
             </span>
           </div>
           <div className="tile-value">{formatEur(tax.totale)}</div>
           <div className="tile-sub">
             {current.entrate > 0 ? `${pct(tax.quotaSuIncassi)} degli incassi del periodo` : "Nessun incasso nel periodo"}
             {tax.contributiFissi > 0 && ` · di cui ${formatEur(tax.contributiFissi)} di contributi fissi`}
+            {ordinario && ivaDaVersare > 0 && ` · di cui ${formatEur(ivaDaVersare)} di IVA`}
           </div>
           <div className="meter" aria-hidden>
             <i style={{ width: `${Math.min(100, tax.quotaSuIncassi * 100)}%`, background: "var(--c-tax)" }} />
@@ -274,7 +284,11 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
           <div className="card-head">
             <div>
               <h2>Dove vanno i tuoi incassi</h2>
-              <p className="small muted">Stima forfettario su {formatEur(current.entrate)} incassati nel periodo</p>
+              <p className="small muted">
+                {ordinario
+                  ? `Regime ordinario: ricavi ${formatEur(tax.ricavi)} senza IVA, spese deducibili ${formatEur(tax.costiDeducibili)}`
+                  : `Stima forfettario su ${formatEur(current.entrate)} incassati nel periodo`}
+              </p>
             </div>
             <span className="kchip kind-tax">
               <Landmark size={19} />
@@ -310,13 +324,20 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
           </div>
           <div className="ytd">
             <span className="muted">
-              Da inizio anno: incassi <strong style={{ color: "var(--fg)" }}>{formatEur(taxYtd.incassi)}</strong>, tasse stimate{" "}
-              <strong style={{ color: "var(--fg)" }}>{formatEur(taxYtd.totale)}</strong>
+              Da inizio anno: incassi <strong style={{ color: "var(--fg)" }}>{formatEur(taxYtd.incassi)}</strong>
+              {ordinario && (
+                <>
+                  , spese deducibili <strong style={{ color: "var(--fg)" }}>{formatEur(taxYtd.costiDeducibili)}</strong>
+                </>
+              )}
+              , {ordinario ? "tasse e IVA stimate" : "tasse stimate"} <strong style={{ color: "var(--fg)" }}>{formatEur(taxYtd.totale)}</strong>
             </span>
             <span className="small subtle row" style={{ gap: 6 }}>
-              <Info size={14} /> Coefficiente {pct(settings.coefficiente)} · {GESTIONE_INFO[settings.gestione ?? "separata"].label}{" "}
-              {pct(settings.aliquota_contributi)} · imposta{" "}
-              {pct(settings.aliquota_imposta)} · <Link href="/settings">modifica</Link>
+              <Info size={14} />
+              {ordinario
+                ? `Regime ordinario · ${GESTIONE_INFO[settings.gestione ?? "separata"].label} ${pct(settings.aliquota_contributi)} · IRPEF a scaglioni`
+                : `Coefficiente ${pct(settings.coefficiente)} · ${GESTIONE_INFO[settings.gestione ?? "separata"].label} ${pct(settings.aliquota_contributi)} · imposta ${pct(settings.aliquota_imposta)}`}{" "}
+              · <Link href="/settings">modifica</Link>
             </span>
           </div>
         </div>

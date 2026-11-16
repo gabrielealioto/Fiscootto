@@ -1,8 +1,10 @@
 import {
   Banknote,
+  Boxes,
   Briefcase,
   Calculator,
   Car,
+  Fuel,
   GraduationCap,
   Landmark,
   Laptop,
@@ -11,8 +13,10 @@ import {
   Package,
   Receipt,
   ShoppingBag,
+  ShoppingCart,
   Smartphone,
   Undo2,
+  Utensils,
   Wallet,
 } from "lucide-react";
 
@@ -21,7 +25,11 @@ const ICONS: Record<string, LucideIcon> = {
   Vendite: ShoppingBag,
   Rimborsi: Undo2,
   "Software e abbonamenti": Laptop,
+  "Materiali e prodotti di consumo": Boxes,
+  "Merci per la rivendita": ShoppingCart,
   Hardware: Package,
+  "Auto e carburante": Fuel,
+  "Vitto e alloggio": Utensils,
   Formazione: GraduationCap,
   Marketing: Megaphone,
   Trasporti: Car,

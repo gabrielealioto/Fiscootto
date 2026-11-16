@@ -1,12 +1,13 @@
 "use client";
 
-import { Briefcase, Check, Info, Landmark } from "lucide-react";
+import { Briefcase, Check, Info, Landmark, Scale } from "lucide-react";
 import { useActionState, useState } from "react";
 import { saveSettings, type ActionState } from "@/app/actions";
 import { lookupAteco } from "@/lib/ateco";
 import { formatEur } from "@/lib/finance";
 import { GESTIONE_INFO, GESTIONI, hasFixedContributions, RIDUZIONE_FORFETTARI, type Gestione } from "@/lib/inps";
 import type { TaxSettings } from "@/lib/finance";
+import type { Regime } from "@/lib/ordinario";
 
 const toPct = (n: number) => String(Math.round(n * 10000) / 100).replace(".", ",");
 const pctLabel = (n: number) => `${toPct(n)}%`;
@@ -19,6 +20,8 @@ export function SettingsForm({ settings, ateco: initialAteco }: { settings: TaxS
   const [gestione, setGestione] = useState<Gestione>(settings.gestione ?? "separata");
   const [aliquotaInps, setAliquotaInps] = useState(toPct(settings.aliquota_contributi));
   const [riduzione, setRiduzione] = useState(!!settings.riduzione_35);
+  const [regime, setRegime] = useState<Regime>(settings.regime ?? "forfettario");
+  const forfettario = regime === "forfettario";
   const info = GESTIONE_INFO[gestione];
   const fixed = hasFixedContributions(gestione);
 
@@ -41,11 +44,49 @@ export function SettingsForm({ settings, ateco: initialAteco }: { settings: TaxS
       <section className="card stack" style={{ gap: 16 }}>
         <div className="row" style={{ gap: 12 }}>
           <span className="card-icon">
+            <Scale size={19} />
+          </span>
+          <div>
+            <h2>Regime fiscale</h2>
+            <p className="small muted">Cambia il modo in cui stimo le tasse.</p>
+          </div>
+        </div>
+        <input type="hidden" name="regime" value={regime} />
+        <div className="option-list" role="radiogroup" aria-label="Regime fiscale">
+          {(
+            [
+              ["forfettario", "Forfettario", "Imposta sostitutiva su incassi × coefficiente. Niente IVA, le spese non riducono le tasse."],
+              ["ordinario", "Ordinario o semplificato", "IRPEF a scaglioni sul reddito (incassi − spese deducibili) e IVA da versare."],
+            ] as const
+          ).map(([id, label, hint]) => (
+            <button
+              type="button"
+              key={id}
+              role="radio"
+              aria-checked={regime === id}
+              className={`option ${regime === id ? "selected" : ""}`}
+              onClick={() => setRegime(id)}
+            >
+              <span>
+                <span style={{ fontWeight: 600, display: "block" }}>{label}</span>
+                <span className="small muted">{hint}</span>
+              </span>
+              {regime === id && <Check size={18} style={{ color: "var(--brand)" }} />}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="card stack" style={{ gap: 16 }}>
+        <div className="row" style={{ gap: 12 }}>
+          <span className="card-icon">
             <Briefcase size={19} />
           </span>
           <div>
             <h2>La tua attività</h2>
-            <p className="small muted">Dal codice ATECO ricavo il coefficiente di redditività.</p>
+            <p className="small muted">
+              {forfettario ? "Dal codice ATECO ricavo il coefficiente di redditività." : "Il codice ATECO della tua attività."}
+            </p>
           </div>
         </div>
 
@@ -65,7 +106,7 @@ export function SettingsForm({ settings, ateco: initialAteco }: { settings: TaxS
 
         {result?.status === "invalid" && <p className="alert alert-warn">{result.message}</p>}
 
-        {result?.status === "ok" && (
+        {forfettario && result?.status === "ok" && (
           <div className="ateco-result">
             <span className="small muted">Gruppo del forfettario</span>
             <span style={{ fontWeight: 600 }}>{result.group.label}</span>
@@ -83,7 +124,7 @@ export function SettingsForm({ settings, ateco: initialAteco }: { settings: TaxS
           </div>
         )}
 
-        {result?.status === "choose" && (
+        {forfettario && result?.status === "choose" && (
           <div className="ateco-result">
             <span className="small muted">Questo codice può ricadere in più gruppi: scegli quello giusto.</span>
             <div className="option-list">
@@ -161,6 +202,7 @@ export function SettingsForm({ settings, ateco: initialAteco }: { settings: TaxS
                 diventa {pctLabel(info.aliquotaAlta ?? 0)} oltre {formatEur(info.soglia ?? 0)}. Massimale {formatEur(info.massimale ?? 0)}.
               </span>
             </div>
+            {forfettario && (
             <label className="row" style={{ gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
               <input
                 type="checkbox"
@@ -177,6 +219,7 @@ export function SettingsForm({ settings, ateco: initialAteco }: { settings: TaxS
                 </span>
               </span>
             </label>
+            )}
           </>
         )}
         {!fixed && gestione !== "cassa" && (
@@ -184,6 +227,7 @@ export function SettingsForm({ settings, ateco: initialAteco }: { settings: TaxS
         )}
       </section>
 
+      {forfettario ? (
       <section className="card stack" style={{ gap: 16 }}>
         <div>
           <h2>Parametri fiscali</h2>
@@ -214,6 +258,46 @@ export function SettingsForm({ settings, ateco: initialAteco }: { settings: TaxS
           <small>Il 5% vale per i primi cinque anni di una nuova attività, se hai i requisiti.</small>
         </div>
       </section>
+      ) : (
+        <section className="card stack" style={{ gap: 16 }}>
+          <div>
+            <h2>IRPEF e addizionali</h2>
+            <p className="small muted">Scaglioni IRPEF 2026: 23% fino a 28.000 €, 33% fino a 50.000 €, 43% oltre.</p>
+          </div>
+          <input type="hidden" name="coefficiente" value={coeff} />
+          <input type="hidden" name="aliquota_imposta" value={imposta} />
+          <div className="form-grid">
+            <label className="field">
+              <span>Addizionale regionale</span>
+              <div className="input-affix">
+                <input
+                  name="addizionale_regionale"
+                  inputMode="decimal"
+                  defaultValue={toPct(settings.addizionale_regionale ?? 0.0123)}
+                  required
+                />
+                <span>%</span>
+              </div>
+            </label>
+            <label className="field">
+              <span>Addizionale comunale</span>
+              <div className="input-affix">
+                <input
+                  name="addizionale_comunale"
+                  inputMode="decimal"
+                  defaultValue={toPct(settings.addizionale_comunale ?? 0.008)}
+                  required
+                />
+                <span>%</span>
+              </div>
+            </label>
+          </div>
+          <small className="muted">
+            Regionale da 1,23% a 3,33% e comunale fino a 0,8% (in alcuni comuni 0,9%): cerca le aliquote della tua regione e del tuo
+            comune. Uso un&apos;aliquota unica, senza scaglioni regionali.
+          </small>
+        </section>
+      )}
 
       {state.message && <p className={`alert ${state.ok ? "alert-ok" : "alert-error"}`}>{state.message}</p>}
       <button className="btn btn-primary btn-block" disabled={pending} style={{ padding: "14px 16px" }}>

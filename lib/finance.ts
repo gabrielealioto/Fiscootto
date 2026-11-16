@@ -1,4 +1,5 @@
 import { fixedContributionsYear, variableContributions, type Gestione } from "./inps";
+import { EMPTY_TOTALS, estimateOrdinario, ordinarioTotals, type Regime } from "./ordinario";
 
 // Logica pura (nessuna dipendenza da Next o Supabase): periodi, aggregati,
 // stima fiscale del regime forfettario e parser CSV. Testata in finance.test.ts.
@@ -15,6 +16,7 @@ export interface Transaction {
   amount: number; // sempre positivo
   category: string;
   description: string;
+  iva?: number; // aliquota IVA % dell'importo (solo regime ordinario)
 }
 
 export interface TaxSettings {
@@ -23,6 +25,9 @@ export interface TaxSettings {
   aliquota_imposta: number; // 0.15 oppure 0.05
   gestione?: Gestione; // predefinita: Gestione Separata
   riduzione_35?: boolean; // riduzione contributiva per forfettari artigiani e commercianti
+  regime?: Regime; // predefinito: forfettario
+  addizionale_regionale?: number; // regime ordinario, es. 0.0123
+  addizionale_comunale?: number; // regime ordinario, es. 0.008
 }
 
 export const DEFAULT_SETTINGS: TaxSettings = {
@@ -31,16 +36,23 @@ export const DEFAULT_SETTINGS: TaxSettings = {
   aliquota_imposta: 0.15,
   gestione: "separata",
   riduzione_35: false,
+  regime: "forfettario",
+  addizionale_regionale: 0.0123,
+  addizionale_comunale: 0.008,
 };
 
 export const CATEGORIES: Record<Kind, string[]> = {
   entrata: ["Fatture", "Vendite", "Rimborsi", "Altro"],
   uscita: [
+    "Materiali e prodotti di consumo",
+    "Merci per la rivendita",
     "Software e abbonamenti",
     "Hardware",
     "Formazione",
     "Marketing",
     "Trasporti",
+    "Auto e carburante",
+    "Vitto e alloggio",
     "Telefono e internet",
     "Commercialista",
     "Tasse e contributi",
@@ -226,6 +238,11 @@ export function summarize(txs: Transaction[], period: Period, ref: string, setti
   // Parte del periodo che cade nell'anno fiscale (una settimana può iniziare a dicembre).
   const periodInYear: Range = { start: range.start < yearStart ? yearStart : range.start, end: range.end };
   const incassiPrima = periodInYear.start > yearStart ? totals(txs, { start: yearStart, end: addDays(periodInYear.start, -1) }).entrate : 0;
+  const ordinario = settings.regime === "ordinario";
+  const quotaPeriodo = daysIn(periodInYear) / daysInYear;
+  const quotaPrima = periodInYear.start > yearStart ? daysIn({ start: yearStart, end: addDays(periodInYear.start, -1) }) / daysInYear : 0;
+  const txPrima = periodInYear.start > yearStart ? txs.filter((t) => inRange(t, { start: yearStart, end: addDays(periodInYear.start, -1) })) : [];
+  const txPeriodo = txs.filter((t) => inRange(t, periodInYear));
   return {
     period,
     range,
@@ -244,9 +261,13 @@ export function summarize(txs: Transaction[], period: Period, ref: string, setti
     })),
     categories: byCategory(txs, range, "uscita"),
     incomeCategories: byCategory(txs, range, "entrata"),
-    tax: estimateTaxRange(incassiPrima, current.entrate, daysIn(periodInYear) / daysInYear, settings),
+    tax: ordinario
+      ? estimateOrdinarioRange(txPrima, txPeriodo, quotaPrima, quotaPeriodo, settings)
+      : estimateTaxRange(incassiPrima, current.entrate, quotaPeriodo, settings),
     taxYtd: {
-      ...estimateTaxRange(0, ytd.entrate, daysIn({ start: yearStart, end: range.end }) / daysInYear, settings),
+      ...(ordinario
+        ? estimateOrdinarioRange([], [...txPrima, ...txPeriodo], 0, quotaPrima + quotaPeriodo, settings)
+        : estimateTaxRange(0, ytd.entrate, daysIn({ start: yearStart, end: range.end }) / daysInYear, settings)),
       yearStart,
       incassi: ytd.entrate,
     },
@@ -259,7 +280,13 @@ export interface TaxEstimate {
   imponibile: number;
   contributi: number; // totale contributi INPS (fissi + in percentuale)
   contributiFissi: number; // quota dei contributi fissi (artigiani e commercianti)
-  imposta: number;
+  imposta: number; // forfettario: imposta sostitutiva; ordinario: IRPEF + addizionali
+  regime: Regime;
+  irpef: number; // solo ordinario
+  addizionali: number; // solo ordinario
+  iva: number; // IVA da versare (solo ordinario; negativa = a credito)
+  ricavi: number; // incassi al netto di IVA
+  costiDeducibili: number; // solo ordinario
   totale: number; // da accantonare
   quotaSuIncassi: number; // % degli incassi da accantonare (0..1)
 }
@@ -298,8 +325,48 @@ export function estimateTaxRange(incassiPrima: number, incassi: number, quotaAnn
     contributi: round2(contributi),
     contributiFissi: round2(fissi),
     imposta: round2(imposta),
+    regime: "forfettario",
+    irpef: 0,
+    addizionali: 0,
+    iva: 0,
+    ricavi: round2(base),
+    costiDeducibili: 0,
     totale: round2(totale),
     quotaSuIncassi: base > 0 ? totale / base : 0,
+  };
+}
+
+/** Stima in regime ordinario sui movimenti (con IVA e spese deducibili). */
+function estimateOrdinarioRange(
+  prima: Transaction[],
+  periodo: Transaction[],
+  quotaPrima: number,
+  quotaPeriodo: number,
+  s: TaxSettings,
+): TaxEstimate {
+  const e = estimateOrdinario(prima.length ? ordinarioTotals(prima) : EMPTY_TOTALS, ordinarioTotals(periodo), quotaPrima, quotaPeriodo, {
+    gestione: s.gestione,
+    aliquota_contributi: s.aliquota_contributi,
+    riduzione_35: s.riduzione_35,
+    addizionale_regionale: s.addizionale_regionale ?? 0,
+    addizionale_comunale: s.addizionale_comunale ?? 0,
+  });
+  const lordo = periodo.filter((t) => t.kind === "entrata").reduce((a, t) => a + t.amount, 0);
+  const imposta = e.irpef + e.addizionali;
+  const totale = e.contributi + imposta + Math.max(0, e.iva);
+  return {
+    imponibile: e.imponibileIrpef,
+    contributi: e.contributi,
+    contributiFissi: e.contributiFissi,
+    imposta: round2(imposta),
+    regime: "ordinario",
+    irpef: e.irpef,
+    addizionali: e.addizionali,
+    iva: e.iva,
+    ricavi: e.ricavi,
+    costiDeducibili: e.costiDeducibili,
+    totale: round2(totale),
+    quotaSuIncassi: lordo > 0 ? totale / lordo : 0,
   };
 }
 

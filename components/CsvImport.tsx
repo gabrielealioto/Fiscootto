@@ -4,6 +4,7 @@ import { FileSpreadsheet, UploadCloud } from "lucide-react";
 import { useState, useTransition } from "react";
 import { importTransactions } from "@/app/actions";
 import { formatEur, parseCsv, type ParseResult } from "@/lib/finance";
+import type { Regime } from "@/lib/ordinario";
 
 async function readText(file: File): Promise<string> {
   const buf = await file.arrayBuffer();
@@ -15,7 +16,7 @@ async function readText(file: File): Promise<string> {
   }
 }
 
-export function CsvImport({ onDone }: { onDone?: () => void }) {
+export function CsvImport({ onDone, regime = "forfettario" }: { onDone?: () => void; regime?: Regime }) {
   const [result, setResult] = useState<ParseResult | null>(null);
   const [fileName, setFileName] = useState("");
   const [drag, setDrag] = useState(false);
@@ -70,6 +71,7 @@ export function CsvImport({ onDone }: { onDone?: () => void }) {
         <p className="small muted">
           Riconosco le colonne <code>data</code>, <code>descrizione</code> e <code>importo</code> (negativo = uscita), oppure{" "}
           <code>entrate</code>/<code>uscite</code>, più <code>categoria</code>. I movimenti già presenti vengono saltati.
+          {regime === "ordinario" && " Il CSV non indica l'IVA: uso l'aliquota tipica di ogni categoria (22% per fatture e acquisti, esente per la banca)."}
         </p>
       )}
 
