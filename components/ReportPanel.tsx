@@ -1,5 +1,6 @@
 "use client";
 
+import { LoaderCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import type { Period } from "@/lib/finance";
@@ -41,28 +42,41 @@ export function ReportPanel({ period, date, label, aiEnabled }: { period: Period
     }
   }
 
-  // Il report mostrato si riferisce sempre al periodo corrente della dashboard.
-  const visible = report && report.period === period ? report : null;
+  const visible = report && report.period === period && report.period_start <= date ? report : null;
 
   return (
-    <section className="card">
-      <div className="card-head">
-        <div>
-          <h2>
-            Report {!aiEnabled && <span className="badge">Automatico · gratuito</span>}
-          </h2>
-          <p className="muted small">
-            Analisi {NAME[period]} di {label},{" "}
-            {aiEnabled ? "scritta da Claude a partire dai tuoi numeri." : "calcolata dai tuoi numeri senza AI. Con una chiave Anthropic la scriverà Claude."} <Link href="/reports">Report salvati</Link>
-          </p>
+    <section className="card report-card">
+      <div className="card-head" style={{ marginBottom: 0, alignItems: "center", flexWrap: "wrap" }}>
+        <div className="row" style={{ gap: 14 }}>
+          <span className="card-icon">
+            <Sparkles size={19} />
+          </span>
+          <div>
+            <h2 className="row" style={{ gap: 8 }}>
+              Report {NAME[period]} {!aiEnabled && <span className="badge badge-muted">Automatico · gratuito</span>}
+            </h2>
+            <p className="small muted">
+              {aiEnabled ? "Analisi di Claude" : "Analisi automatica"} di {label} ·{" "}
+              <Link href="/reports">report salvati</Link>
+            </p>
+          </div>
         </div>
         <button className="btn btn-primary" onClick={generate} disabled={loading}>
-          {loading ? "Sto scrivendo il report…" : `Genera report ${NAME[period]}`}
+          {loading ? <LoaderCircle size={17} className="spin" /> : <Sparkles size={17} />}
+          {loading ? "Sto scrivendo…" : visible ? "Rigenera" : "Genera report"}
         </button>
       </div>
       {loading && <div className="loading-bar" aria-hidden />}
-      {error && <p className="alert alert-error">{error}</p>}
-      {warning && <p className="alert alert-warn">{warning}</p>}
+      {error && (
+        <p className="alert alert-error" style={{ marginTop: 14 }}>
+          {error}
+        </p>
+      )}
+      {warning && (
+        <p className="alert alert-warn" style={{ marginTop: 14 }}>
+          {warning}
+        </p>
+      )}
       {visible && <ReportView content={visible.content} filename={`report-${visible.period}-${visible.period_start}.md`} />}
     </section>
   );

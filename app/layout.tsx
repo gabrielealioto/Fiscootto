@@ -1,6 +1,10 @@
+import "@fontsource-variable/inter";
+import { LogOut } from "lucide-react";
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
+import { Logo } from "@/components/Logo";
+import { SidebarNav, TabBar } from "@/components/Nav";
 import { InstallButton, ServiceWorkerRegister } from "@/components/Pwa";
+import { QuickActionsHost } from "@/components/QuickActions";
 import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
 
@@ -21,10 +25,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f7f9" },
-    { media: "(prefers-color-scheme: dark)", color: "#111418" },
-  ],
+  viewportFit: "cover",
+  themeColor: "#070a09",
+  colorScheme: "dark",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -36,32 +39,46 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="it">
       <body>
-        <header className="topbar">
-          <Link href="/" className="brand">
-            <span className="brand-mark" aria-hidden>
-              €
-            </span>
-            Fiscootto
-          </Link>
-          {user && (
-            <nav className="nav">
-              <Link href="/">Dashboard</Link>
-              <Link href="/reports">Report salvati</Link>
-              <Link href="/settings">Impostazioni</Link>
-            </nav>
-          )}
-          <div className="topbar-right">
-            <InstallButton />
-            {user && (
-              <form action="/auth/signout" method="post">
-                <button className="btn btn-ghost btn-sm" type="submit" title={user.email ?? ""}>
-                  Esci
-                </button>
-              </form>
-            )}
+        {user ? (
+          <div className="app">
+            <aside className="sidebar">
+              <Logo />
+              <SidebarNav />
+              <div className="sidebar-foot">
+                <InstallButton />
+                <div className="user-chip">
+                  <span className="avatar">{(user.email ?? "?").charAt(0)}</span>
+                  <span className="user-email" title={user.email ?? ""}>
+                    {user.email}
+                  </span>
+                  <form action="/auth/signout" method="post" style={{ marginLeft: "auto" }}>
+                    <button className="btn btn-ghost btn-icon" type="submit" aria-label="Esci" title="Esci">
+                      <LogOut size={17} />
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </aside>
+            <main className="main">
+              <header className="mobile-top">
+                <Logo size={16} />
+                <div className="row" style={{ gap: 4 }}>
+                  <InstallButton compact />
+                  <form action="/auth/signout" method="post">
+                    <button className="btn btn-ghost btn-icon" type="submit" aria-label="Esci">
+                      <LogOut size={18} />
+                    </button>
+                  </form>
+                </div>
+              </header>
+              {children}
+            </main>
+            <TabBar />
+            <QuickActionsHost />
           </div>
-        </header>
-        <main className="container">{children}</main>
+        ) : (
+          children
+        )}
         <ServiceWorkerRegister />
       </body>
     </html>

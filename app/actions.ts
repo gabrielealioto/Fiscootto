@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { fetchTransactions } from "@/lib/data";
+import { atecoDigits, formatAteco } from "@/lib/ateco";
 import { dedupeKey, isIsoDate, round2, type Kind, type ParsedRow } from "@/lib/finance";
 import { createClient } from "@/lib/supabase/server";
 
@@ -111,6 +112,12 @@ export async function saveSettings(_prev: ActionState, form: FormData): Promise<
   if (!(coefficiente > 0 && coefficiente <= 1)) return { ok: false, message: "Coefficiente tra 1 e 100%." };
   if (!(aliquota_contributi >= 0 && aliquota_contributi < 1)) return { ok: false, message: "Aliquota contributi tra 0 e 99%." };
   if (!(aliquota_imposta >= 0 && aliquota_imposta < 1)) return { ok: false, message: "Imposta sostitutiva tra 0 e 99%." };
+  const atecoRaw = String(form.get("ateco") ?? "").trim();
+  const digits = atecoDigits(atecoRaw);
+  if (atecoRaw && (digits.length < 2 || digits.length > 6 || digits.length % 2 !== 0)) {
+    return { ok: false, message: "Codice ATECO non valido: usa il formato 62.01.00." };
+  }
+  const ateco = digits ? formatAteco(digits) : "";
 
   const {
     data: { user },
@@ -120,6 +127,7 @@ export async function saveSettings(_prev: ActionState, form: FormData): Promise<
     coefficiente: round4(coefficiente),
     aliquota_contributi: round4(aliquota_contributi),
     aliquota_imposta: round4(aliquota_imposta),
+    ateco,
     updated_at: new Date().toISOString(),
   });
   if (error) return { ok: false, message: error.message };
