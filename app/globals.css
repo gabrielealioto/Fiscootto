@@ -548,3 +548,67 @@ dialog.sheet[open] { animation: pop 0.18s ease-out; }
 .kcard::before { content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 4px; border-radius: 0 4px 4px 0; background: var(--k); }
 .ktag { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 650; color: var(--k-ink); }
 .ktag::before { content: ""; width: 8px; height: 8px; border-radius: 99px; background: var(--k); }
+
+/* ─── Work / Life ─── */
+.tx-click { cursor: pointer; }
+.scope-chip {
+  display: inline-block; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+  padding: 1px 7px; border-radius: 99px; margin-right: 8px; vertical-align: 2px;
+}
+.scope-chip.work { background: var(--brand-soft); color: var(--brand); }
+.scope-chip.life { background: rgb(255 255 255 / 0.08); color: var(--muted); }
+.view-switch .seg > a { gap: 6px; }
+
+/* ─── Avvisi ─── */
+.alerts { display: flex; flex-direction: column; gap: 8px; }
+.alert-row {
+  display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center;
+  padding: 10px 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); color: var(--fg);
+}
+.alert-row:hover { text-decoration: none; background: var(--surface-2); }
+.alert-row .ai { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; }
+.alert-row.critico .ai { background: var(--neg-soft); color: var(--neg); }
+.alert-row.attenzione .ai { background: var(--warn-soft); color: var(--warn); }
+.alert-row.info .ai { background: var(--brand-soft); color: var(--brand); }
+.alert-row strong { display: block; font-size: 0.92rem; }
+.alert-row span.small { color: var(--muted); }
+
+/* ─── Pianifica ─── */
+.plan-list { display: flex; flex-direction: column; gap: 10px; }
+.plan-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; padding: 12px 0; border-top: 1px solid var(--border); }
+.plan-item:first-child { border-top: 0; padding-top: 0; }
+.plan-item .meter { grid-column: 1 / -1; }
+.plan-title { font-weight: 600; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.plan-title span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-meta { font-size: 0.82rem; color: var(--muted); }
+.plan-actions { display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.status-pill { font-size: 0.72rem; font-weight: 700; padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
+.status-pill.ok { background: var(--pos-soft); color: var(--pos); }
+.status-pill.attenzione, .status-pill.presto, .status-pill.oggi { background: var(--warn-soft); color: var(--warn); }
+.status-pill.superato, .status-pill.scaduta { background: var(--neg-soft); color: var(--neg); }
+.status-pill.futura, .status-pill.pausa { background: var(--surface-3); color: var(--muted); }
+.meter-warn > i { background: var(--warn) !important; }
+.meter-over > i { background: var(--neg) !important; }
+.goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.goal { display: flex; flex-direction: column; gap: 10px; }
+.goal-value { font-size: 1.4rem; font-weight: 720; letter-spacing: -0.02em; }
+.inline-form { display: flex; gap: 8px; }
+.inline-form input { padding: 8px 11px; font-size: 15px; }
+.inline-form .btn { padding: 8px 12px; }
+details.add-box > summary { list-style: none; cursor: pointer; }
+details.add-box > summary::-webkit-details-marker { display: none; }
+details.add-box[open] > summary { margin-bottom: 14px; }
+.form-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) {
+  .form-grid-3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .alert-row { grid-template-columns: 34px 1fr; }
+  .alert-row > svg:last-child { display: none; }
+}
+
+@media (max-width: 560px) {
+  .form-grid.toggles { grid-template-columns: minmax(0, 1fr); }
+  .alert-row { padding: 9px 12px; gap: 10px; grid-template-columns: 30px 1fr; }
+  .alert-row .ai { width: 30px; height: 30px; }
+  .alert-row span.small { display: none; }
+  .alert-row strong { font-size: 0.88rem; }
+}

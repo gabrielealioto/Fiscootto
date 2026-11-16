@@ -16,19 +16,27 @@ export function Sheet({
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // Se la chiusura arriva dal codice (open = false) non va segnalata di nuovo al genitore.
+  const programmatic = useRef(false);
 
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
+    if (!open && d.open) {
+      programmatic.current = true;
+      d.close();
+    }
   }, [open]);
 
   return (
     <dialog
       ref={ref}
       className="sheet"
-      onClose={onClose}
+      onClose={() => {
+        if (programmatic.current) programmatic.current = false;
+        else onClose();
+      }}
       onClick={(e) => {
         if (e.target === ref.current) onClose(); // clic sullo sfondo
       }}

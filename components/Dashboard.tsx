@@ -1,10 +1,13 @@
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Briefcase,
   ChevronLeft,
   ChevronRight,
+  Home,
   Info,
   Landmark,
+  Layers,
   PiggyBank,
   Receipt,
   TrendingDown,
@@ -24,8 +27,10 @@ import {
   type Transaction,
 } from "@/lib/finance";
 import { GESTIONE_INFO } from "@/lib/inps";
+import { VIEW_LABEL, VIEWS, type Alert, type BudgetStatus, type GoalStatus, type Recurring, type View } from "@/lib/planning";
+import { AlertsList, BudgetCard, GoalsCard, UpcomingCard } from "./PlanningCards";
 import { BarChart } from "./BarChart";
-import { AddButton, ImportButton } from "./QuickActions";
+import { AddButton, ImportButton, ReceiptButton } from "./QuickActions";
 import { ReportPanel } from "./ReportPanel";
 import { Sparkline } from "./Sparkline";
 import { TransactionList } from "./TransactionList";
@@ -40,7 +45,15 @@ interface Props {
   refDate: string;
   settings: TaxSettings;
   aiEnabled: boolean;
+  receiptEnabled?: boolean;
+  view: View;
+  budgets: BudgetStatus[];
+  recurring: Recurring[];
+  goals: GoalStatus[];
+  alerts: Alert[];
 }
+
+const VIEW_ICON = { work: Briefcase, life: Home, tutto: Layers };
 
 const pct = (n: number) => `${(n * 100).toLocaleString("it-IT", { maximumFractionDigits: 1 })}%`;
 
@@ -55,19 +68,35 @@ function Delta({ value, invert = false }: { value: number | null; invert?: boole
   );
 }
 
-export function Dashboard({ summary, transactions, today, refDate, settings, aiEnabled }: Props) {
+export function Dashboard({
+  summary,
+  transactions,
+  today,
+  refDate,
+  settings,
+  aiEnabled,
+  receiptEnabled = false,
+  view,
+  budgets,
+  recurring,
+  goals,
+  alerts,
+}: Props) {
+  const life = view === "life";
   const { period, range, current, previous, change, tax, taxYtd } = summary;
   const prev = shiftPeriod(period, refDate, -1).start;
   const next = shiftPeriod(period, refDate, 1).start;
   const isCurrent = range.start <= today && today <= range.end;
-  const href = (p: Period, d?: string) => `/?p=${p}${d ? `&d=${d}` : ""}`;
+  const qs = (p: Period, d?: string, v: View = view) => `/?p=${p}${d ? `&d=${d}` : ""}${v !== "work" ? `&v=${v}` : ""}`;
+  const href = (p: Period, d?: string) => qs(p, d);
   const label = longLabel(period, range);
   const maxCat = Math.max(1, ...summary.categories.map((c) => c.amount));
   const margin = current.entrate > 0 ? current.utile / current.entrate : null;
   const avgProfit = summary.history.reduce((s, h) => s + h.totals.utile, 0) / Math.max(1, summary.history.length);
 
-  // Dove vanno gli incassi: quanto resta e quanto va in contributi e imposta.
-  const resta = Math.max(0, current.entrate - tax.totale);
+  // Dove vanno gli incassi di lavoro: quanto resta e quanto va in contributi, imposte e IVA.
+  const incassiWork = summary.work.entrate;
+  const resta = Math.max(0, incassiWork - tax.totale);
   const ordinario = tax.regime === "ordinario";
   const ivaDaVersare = Math.max(0, tax.iva);
   const parts = [
@@ -82,7 +111,9 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
     },
     ...(ordinario ? [{ key: "iva", cls: "p-iva", label: "IVA da versare", value: ivaDaVersare, color: "var(--c-iva)" }] : []),
   ];
-  const share = (v: number) => (current.entrate > 0 ? v / current.entrate : 0);
+  const share = (v: number) => (incassiWork > 0 ? v / incassiWork : 0);
+  const workBudgets = budgets.filter((b) => view === "tutto" || b.scope === view);
+  const viewRecurring = recurring.filter((r) => view === "tutto" || r.scope === view);
 
   return (
     <div className="stack-lg">
@@ -92,6 +123,16 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
           <h1 className="page-title">{label}</h1>
         </div>
         <div className="toolbar">
+          <div className="seg view-switch" role="tablist" aria-label="Ambito">
+            {VIEWS.map((v) => {
+              const Icon = VIEW_ICON[v];
+              return (
+                <Link key={v} href={qs(period, isCurrent ? undefined : refDate, v)} className={v === view ? "active" : ""} role="tab" aria-selected={v === view}>
+                  <Icon size={15} /> {VIEW_LABEL[v]}
+                </Link>
+              );
+            })}
+          </div>
           <div className="seg" role="tablist" aria-label="Periodo">
             {PERIODS.map((p) => (
               <Link
@@ -126,17 +167,20 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
           </div>
           <div className="actions">
             <ImportButton />
+            {receiptEnabled && <ReceiptButton />}
             <AddButton />
           </div>
         </div>
       </header>
+
+      <AlertsList alerts={alerts} />
 
       <section className="grid grid-3">
         {/* Profitto: il numero principale */}
         <div className="card hero span-2">
           <Sparkline className="hero-spark" values={summary.history.map((h) => h.totals.utile)} color="#7ee2bd" />
           <div className="hero-label">
-            <span className="dot" style={{ background: "#7ee2bd" }} /> Profitto · {label}
+            <span className="dot" style={{ background: "#7ee2bd" }} /> {life ? "Saldo personale" : view === "tutto" ? "Saldo complessivo" : "Profitto"} · {label}
           </div>
           <div className="row wrap" style={{ alignItems: "baseline", gap: 14 }}>
             <span className="hero-value">{formatEur(current.utile)}</span>
@@ -144,8 +188,8 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
           </div>
           <div className="hero-split">
             <div>
-              <span>Netto dopo le tasse</span>
-              <strong>{formatEur(current.utile - tax.totale)}</strong>
+              <span>{life ? "Tasso di risparmio" : "Netto dopo le tasse"}</span>
+              <strong>{life ? (margin === null ? "—" : pct(margin)) : formatEur(current.utile - tax.totale)}</strong>
             </div>
             <div>
               <span>Media ultimi {summary.history.length} periodi</span>
@@ -154,7 +198,12 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
           </div>
         </div>
 
-        {/* Tasse da accantonare */}
+        {/* Tasse da accantonare (solo lavoro); nella vista Life il budget del mese */}
+        {life ? (
+          <div className="full-sm" style={{ display: "contents" }}>
+            <BudgetCard budgets={workBudgets} />
+          </div>
+        ) : (
         <div className="card tile kcard kind-tax full-sm">
           <div className="tile-top">
             <span className="tile-label">
@@ -166,7 +215,7 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
           </div>
           <div className="tile-value">{formatEur(tax.totale)}</div>
           <div className="tile-sub">
-            {current.entrate > 0 ? `${pct(tax.quotaSuIncassi)} degli incassi del periodo` : "Nessun incasso nel periodo"}
+            {incassiWork > 0 ? `${pct(tax.quotaSuIncassi)} degli incassi di lavoro` : "Nessun incasso di lavoro nel periodo"}
             {tax.contributiFissi > 0 && ` · di cui ${formatEur(tax.contributiFissi)} di contributi fissi`}
             {ordinario && ivaDaVersare > 0 && ` · di cui ${formatEur(ivaDaVersare)} di IVA`}
           </div>
@@ -174,10 +223,11 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
             <i style={{ width: `${Math.min(100, tax.quotaSuIncassi * 100)}%`, background: "var(--c-tax)" }} />
           </div>
           <div className="tile-sub" style={{ justifyContent: "space-between" }}>
-            <span>Da inizio anno</span>
+            <span>Da inizio anno{view === "tutto" ? " · solo Work" : ""}</span>
             <strong style={{ color: "var(--fg)" }}>{formatEur(taxYtd.totale)}</strong>
           </div>
         </div>
+        )}
 
         {/* Le tre voci */}
         <div className="card tile kcard kind-in">
@@ -212,11 +262,13 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
               <span className="kchip">
                 <TrendingUp size={19} />
               </span>
-              Margine
+              {life ? "Risparmio" : "Margine"}
             </span>
           </div>
           <div className="tile-value">{margin === null ? "—" : pct(margin)}</div>
-          <div className="tile-sub">Profitto su entrate · {current.movimenti} movimenti</div>
+          <div className="tile-sub">
+            {life ? "Quanto resta delle entrate" : "Profitto su entrate"} · {current.movimenti} movimenti
+          </div>
         </div>
 
         {/* Andamento */}
@@ -279,7 +331,8 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
           )}
         </div>
 
-        {/* Dove vanno gli incassi */}
+        {/* Dove vanno gli incassi (solo lavoro) */}
+        {!life && (
         <div className="card span-3">
           <div className="card-head">
             <div>
@@ -287,14 +340,14 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
               <p className="small muted">
                 {ordinario
                   ? `Regime ordinario: ricavi ${formatEur(tax.ricavi)} senza IVA, spese deducibili ${formatEur(tax.costiDeducibili)}`
-                  : `Stima forfettario su ${formatEur(current.entrate)} incassati nel periodo`}
+                  : `Stima forfettario su ${formatEur(incassiWork)} incassati per lavoro nel periodo`}
               </p>
             </div>
             <span className="kchip kind-tax">
               <Landmark size={19} />
             </span>
           </div>
-          {current.entrate > 0 ? (
+          {incassiWork > 0 ? (
             <div
               className="segbar"
               role="img"
@@ -342,6 +395,13 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
           </div>
         </div>
 
+        )}
+
+        {/* Pianificazione */}
+        {!life && <BudgetCard budgets={workBudgets} />}
+        <UpcomingCard recurring={viewRecurring} today={today} />
+        <GoalsCard goals={goals} />
+
         <div className="span-3">
           <ReportPanel period={period} date={refDate} label={label} aiEnabled={aiEnabled} />
         </div>
@@ -355,7 +415,7 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
               </p>
             </div>
           </div>
-          <TransactionList transactions={transactions} />
+          <TransactionList transactions={transactions} showScope={view === "tutto"} />
         </div>
       </section>
     </div>

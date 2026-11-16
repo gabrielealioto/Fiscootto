@@ -1,10 +1,11 @@
 "use client";
 
-import { FileSpreadsheet, UploadCloud } from "lucide-react";
+import { Briefcase, FileSpreadsheet, Home, UploadCloud } from "lucide-react";
 import { useState, useTransition } from "react";
 import { importTransactions } from "@/app/actions";
 import { formatEur, parseCsv, type ParseResult } from "@/lib/finance";
 import type { Regime } from "@/lib/ordinario";
+import type { Scope } from "@/lib/planning";
 
 async function readText(file: File): Promise<string> {
   const buf = await file.arrayBuffer();
@@ -20,6 +21,7 @@ export function CsvImport({ onDone, regime = "forfettario" }: { onDone?: () => v
   const [result, setResult] = useState<ParseResult | null>(null);
   const [fileName, setFileName] = useState("");
   const [drag, setDrag] = useState(false);
+  const [scope, setScope] = useState<Scope>("work");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
 
@@ -33,7 +35,7 @@ export function CsvImport({ onDone, regime = "forfettario" }: { onDone?: () => v
   function onImport() {
     if (!result?.rows.length) return;
     start(async () => {
-      const r = await importTransactions(result.rows);
+      const r = await importTransactions(result.rows, scope);
       setMessage({ ok: !!r.ok, text: r.message ?? "" });
       if (r.ok) {
         setResult(null);
@@ -48,6 +50,20 @@ export function CsvImport({ onDone, regime = "forfettario" }: { onDone?: () => v
 
   return (
     <div className="stack" style={{ gap: 14 }}>
+      <div className="field">
+        <span>Conto da importare</span>
+        <div className="seg seg-full" role="radiogroup" aria-label="Ambito">
+          <label className={scope === "work" ? "active" : ""}>
+            <input type="radio" checked={scope === "work"} onChange={() => setScope("work")} />
+            <Briefcase size={16} /> Work
+          </label>
+          <label className={scope === "life" ? "active" : ""}>
+            <input type="radio" checked={scope === "life"} onChange={() => setScope("life")} />
+            <Home size={16} /> Life
+          </label>
+        </div>
+        <small>Le tue regole automatiche possono comunque spostare un movimento nell&apos;altro ambito.</small>
+      </div>
       <label
         className={`dropzone ${drag ? "drag" : ""}`}
         onDragOver={(e) => {

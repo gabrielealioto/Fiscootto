@@ -17,6 +17,7 @@ export interface Transaction {
   category: string;
   description: string;
   iva?: number; // aliquota IVA % dell'importo (solo regime ordinario)
+  scope?: "work" | "life"; // ambito: attività (predefinito) o personale
 }
 
 export interface TaxSettings {
@@ -28,6 +29,7 @@ export interface TaxSettings {
   regime?: Regime; // predefinito: forfettario
   addizionale_regionale?: number; // regime ordinario, es. 0.0123
   addizionale_comunale?: number; // regime ordinario, es. 0.008
+  deducibilita?: Record<string, number>; // categorie personalizzate di spesa Work → quota deducibile
 }
 
 export const DEFAULT_SETTINGS: TaxSettings = {
@@ -224,25 +226,41 @@ export interface PeriodSummary {
   incomeCategories: { category: string; amount: number }[];
   tax: TaxEstimate;
   taxYtd: TaxEstimate & { yearStart: string; incassi: number };
+  work: Totals; // movimenti di lavoro del periodo (base delle tasse)
 }
 
-export function summarize(txs: Transaction[], period: Period, ref: string, settings: TaxSettings, historyCount = 6): PeriodSummary {
+/**
+ * Riepilogo del periodo. `view` sceglie quali movimenti mostrare (work, life o tutto);
+ * la stima fiscale usa sempre e solo i movimenti di lavoro.
+ */
+export function summarize(
+  allTxs: Transaction[],
+  period: Period,
+  ref: string,
+  settings: TaxSettings,
+  historyCount = 6,
+  view: "work" | "life" | "tutto" = "tutto",
+): PeriodSummary {
+  const isWork = (t: Transaction) => t.scope !== "life";
+  const txs = view === "tutto" ? allTxs : allTxs.filter((t) => (view === "work" ? isWork(t) : !isWork(t)));
+  const workTxs = allTxs.filter(isWork);
   const range = periodRange(period, ref);
   const previousRange = shiftPeriod(period, ref, -1);
   const current = totals(txs, range);
   const previous = totals(txs, previousRange);
   const yearStart = `${range.end.slice(0, 4)}-01-01`;
-  const ytd = totals(txs, { start: yearStart, end: range.end });
+  const ytd = totals(workTxs, { start: yearStart, end: range.end });
+  const workCurrent = totals(workTxs, range);
   const year = Number(yearStart.slice(0, 4));
   const daysInYear = daysIn({ start: yearStart, end: `${year}-12-31` });
   // Parte del periodo che cade nell'anno fiscale (una settimana può iniziare a dicembre).
   const periodInYear: Range = { start: range.start < yearStart ? yearStart : range.start, end: range.end };
-  const incassiPrima = periodInYear.start > yearStart ? totals(txs, { start: yearStart, end: addDays(periodInYear.start, -1) }).entrate : 0;
+  const incassiPrima = periodInYear.start > yearStart ? totals(workTxs, { start: yearStart, end: addDays(periodInYear.start, -1) }).entrate : 0;
   const ordinario = settings.regime === "ordinario";
   const quotaPeriodo = daysIn(periodInYear) / daysInYear;
   const quotaPrima = periodInYear.start > yearStart ? daysIn({ start: yearStart, end: addDays(periodInYear.start, -1) }) / daysInYear : 0;
-  const txPrima = periodInYear.start > yearStart ? txs.filter((t) => inRange(t, { start: yearStart, end: addDays(periodInYear.start, -1) })) : [];
-  const txPeriodo = txs.filter((t) => inRange(t, periodInYear));
+  const txPrima = periodInYear.start > yearStart ? workTxs.filter((t) => inRange(t, { start: yearStart, end: addDays(periodInYear.start, -1) })) : [];
+  const txPeriodo = workTxs.filter((t) => inRange(t, periodInYear));
   return {
     period,
     range,
@@ -259,11 +277,12 @@ export function summarize(txs: Transaction[], period: Period, ref: string, setti
       label: shortLabel(period, r),
       totals: totals(txs, r),
     })),
+    work: workCurrent,
     categories: byCategory(txs, range, "uscita"),
     incomeCategories: byCategory(txs, range, "entrata"),
     tax: ordinario
       ? estimateOrdinarioRange(txPrima, txPeriodo, quotaPrima, quotaPeriodo, settings)
-      : estimateTaxRange(incassiPrima, current.entrate, quotaPeriodo, settings),
+      : estimateTaxRange(incassiPrima, workCurrent.entrate, quotaPeriodo, settings),
     taxYtd: {
       ...(ordinario
         ? estimateOrdinarioRange([], [...txPrima, ...txPeriodo], 0, quotaPrima + quotaPeriodo, settings)
@@ -344,7 +363,8 @@ function estimateOrdinarioRange(
   quotaPeriodo: number,
   s: TaxSettings,
 ): TaxEstimate {
-  const e = estimateOrdinario(prima.length ? ordinarioTotals(prima) : EMPTY_TOTALS, ordinarioTotals(periodo), quotaPrima, quotaPeriodo, {
+  const custom = s.deducibilita ?? {};
+  const e = estimateOrdinario(prima.length ? ordinarioTotals(prima, custom) : EMPTY_TOTALS, ordinarioTotals(periodo, custom), quotaPrima, quotaPeriodo, {
     gestione: s.gestione,
     aliquota_contributi: s.aliquota_contributi,
     riduzione_35: s.riduzione_35,

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import { fetchSettings, fetchTransactions } from "@/lib/data";
+import { customDeducibility, fetchPlanning, fetchSettings, fetchTransactions } from "@/lib/data";
 import { dataRange, isIsoDate, PERIODS, summarize, todayRome, type Period } from "@/lib/finance";
 import { BASIC_MODEL, buildBasicReport, buildReportPrompt, REPORT_SYSTEM_PROMPT } from "@/lib/report";
 import { createClient } from "@/lib/supabase/server";
@@ -23,7 +23,10 @@ export async function POST(request: Request) {
 
   let txs, settings;
   try {
-    [txs, settings] = await Promise.all([fetchTransactions(supabase, dataRange(period, date)), fetchSettings(supabase)]);
+    const [all, base, planning] = await Promise.all([fetchTransactions(supabase, dataRange(period, date)), fetchSettings(supabase), fetchPlanning(supabase)]);
+    // Il report è un'analisi dell'attività: usa solo i movimenti Work.
+    txs = all.filter((t) => t.scope !== "life");
+    settings = { ...base, deducibilita: customDeducibility(planning.categories) };
   } catch (e) {
     return NextResponse.json({ error: `Errore nel leggere i dati: ${(e as Error).message}` }, { status: 500 });
   }

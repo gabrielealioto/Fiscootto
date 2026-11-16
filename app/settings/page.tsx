@@ -1,11 +1,12 @@
 import { Calculator } from "lucide-react";
 import { SettingsForm } from "@/components/SettingsForm";
-import { fetchSettings } from "@/lib/data";
+import { CategoryManager } from "@/components/CategoryManager";
+import { fetchPlanning, fetchSettings } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const settings = await fetchSettings(supabase);
+  const [settings, planning] = await Promise.all([fetchSettings(supabase), fetchPlanning(supabase)]);
   return (
     <div className="stack-lg" style={{ maxWidth: 1040 }}>
       <header className="page-head" style={{ marginBottom: 0 }}>
@@ -80,6 +81,9 @@ export default async function SettingsPage() {
             </>
           )}
         </aside>
+      </div>
+      <div className="settings-grid">
+        <CategoryManager categories={planning.categories} rules={planning.rules} regime={settings.regime ?? "forfettario"} />
       </div>
     </div>
   );
