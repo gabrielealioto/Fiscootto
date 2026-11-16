@@ -59,7 +59,7 @@ supabase/migrations/     schema SQL con RLS
 
 ## Messa online (Vercel)
 
-Importa il repository GitHub su Vercel, aggiungi le stesse variabili d'ambiente e fai il deploy. Poi aggiungi `https://<tuo-dominio>/auth/callback` ai Redirect URL di Supabase.
+Importa il repository GitHub su Vercel, aggiungi le stesse variabili d'ambiente e fai il deploy. Il file `vercel.json` imposta già il framework su Next.js; se il progetto Vercel è stato creato quando il repository era vuoto, controlla comunque in *Settings → Build and Deployment* che *Framework Preset* sia **Next.js** e che *Output Directory* non sia sovrascritta. Lascia disattivata la *Vercel Authentication* (Settings → Deployment Protection) sul dominio di produzione: l'app ha già il suo login. Poi aggiungi `https://<tuo-dominio>/auth/callback` ai Redirect URL di Supabase.
 
 ## Prossimi passi
 
