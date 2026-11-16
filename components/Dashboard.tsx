@@ -23,6 +23,7 @@ import {
   type TaxSettings,
   type Transaction,
 } from "@/lib/finance";
+import { GESTIONE_INFO } from "@/lib/inps";
 import { BarChart } from "./BarChart";
 import { AddButton, ImportButton } from "./QuickActions";
 import { ReportPanel } from "./ReportPanel";
@@ -69,7 +70,7 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
   const resta = Math.max(0, current.entrate - tax.totale);
   const parts = [
     { key: "net", cls: "p-net", label: "Resta a te", value: resta, color: "var(--c-profit)" },
-    { key: "inps", cls: "p-inps", label: "Contributi INPS", value: tax.contributi, color: "var(--c-tax)" },
+    { key: "inps", cls: "p-inps", label: tax.contributiFissi > 0 ? "Contributi INPS (con i fissi)" : "Contributi INPS", value: tax.contributi, color: "var(--c-tax)" },
     { key: "tax", cls: "p-tax", label: "Imposta sostitutiva", value: tax.imposta, color: "var(--c-tax-2)" },
   ];
   const share = (v: number) => (current.entrate > 0 ? v / current.entrate : 0);
@@ -157,6 +158,7 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
           <div className="tile-value">{formatEur(tax.totale)}</div>
           <div className="tile-sub">
             {current.entrate > 0 ? `${pct(tax.quotaSuIncassi)} degli incassi del periodo` : "Nessun incasso nel periodo"}
+            {tax.contributiFissi > 0 && ` · di cui ${formatEur(tax.contributiFissi)} di contributi fissi`}
           </div>
           <div className="meter" aria-hidden>
             <i style={{ width: `${Math.min(100, tax.quotaSuIncassi * 100)}%`, background: "var(--c-tax)" }} />
@@ -312,7 +314,8 @@ export function Dashboard({ summary, transactions, today, refDate, settings, aiE
               <strong style={{ color: "var(--fg)" }}>{formatEur(taxYtd.totale)}</strong>
             </span>
             <span className="small subtle row" style={{ gap: 6 }}>
-              <Info size={14} /> Coefficiente {pct(settings.coefficiente)} · INPS {pct(settings.aliquota_contributi)} · imposta{" "}
+              <Info size={14} /> Coefficiente {pct(settings.coefficiente)} · {GESTIONE_INFO[settings.gestione ?? "separata"].label}{" "}
+              {pct(settings.aliquota_contributi)} · imposta{" "}
               {pct(settings.aliquota_imposta)} · <Link href="/settings">modifica</Link>
             </span>
           </div>

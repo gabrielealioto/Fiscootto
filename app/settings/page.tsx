@@ -31,7 +31,7 @@ export default async function SettingsPage() {
             </li>
             <li>
               <span>
-                <strong style={{ color: "var(--fg)" }}>Contributi INPS</strong> = imponibile × aliquota contributi.
+                <strong style={{ color: "var(--fg)" }}>Contributi INPS</strong>: in Gestione Separata una percentuale dell&apos;imponibile fino al massimale; per artigiani e commercianti i contributi fissi più una percentuale sulla parte oltre il minimale.
               </span>
             </li>
             <li>
@@ -41,9 +41,8 @@ export default async function SettingsPage() {
             </li>
           </ol>
           <p className="small muted">
-            Nel forfettario le spese non riducono le tasse: contano solo gli incassi. I contributi in realtà si deducono nell&apos;anno in
-            cui li paghi, e artigiani e commercianti hanno anche una quota fissa: la stima serve per decidere quanto mettere da parte, non
-            per la dichiarazione. Verifica sempre con il commercialista.
+            Nel forfettario le spese non riducono le tasse: contano solo gli incassi. I contributi fissi sono ripartiti sui giorni dell&apos;anno, così ogni periodo accantona la sua parte. I contributi in realtà si
+            deducono nell&apos;anno in cui li paghi: la stima serve per decidere quanto mettere da parte, non per la dichiarazione. Verifica sempre con il commercialista.
           </p>
         </aside>
       </div>

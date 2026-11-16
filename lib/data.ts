@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_SETTINGS, type Range, type TaxSettings, type Transaction } from "./finance";
+import { GESTIONI, type Gestione } from "./inps";
 
 const PAGE = 1000; // limite di righe per richiesta di PostgREST
 
@@ -27,7 +28,7 @@ export type UserSettings = TaxSettings & { ateco: string };
 export async function fetchSettings(supabase: SupabaseClient): Promise<UserSettings> {
   const { data } = await supabase
     .from("settings")
-    .select("coefficiente, aliquota_contributi, aliquota_imposta, ateco")
+    .select("coefficiente, aliquota_contributi, aliquota_imposta, ateco, gestione, riduzione_35")
     .maybeSingle();
   if (!data) return { ...DEFAULT_SETTINGS, ateco: "" };
   return {
@@ -35,5 +36,7 @@ export async function fetchSettings(supabase: SupabaseClient): Promise<UserSetti
     aliquota_contributi: Number(data.aliquota_contributi),
     aliquota_imposta: Number(data.aliquota_imposta),
     ateco: data.ateco ?? "",
+    gestione: (GESTIONI as string[]).includes(data.gestione) ? (data.gestione as Gestione) : "separata",
+    riduzione_35: !!data.riduzione_35,
   };
 }
