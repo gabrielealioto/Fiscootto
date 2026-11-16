@@ -68,6 +68,11 @@ export const COST_RULES: Record<string, CostRule> = {
 
 const UNKNOWN_RULE: CostRule = { deducibile: 0, ivaDetraibile: 0, ivaPredefinita: 22, nota: "Categoria personalizzata: non dedotta." };
 
+/** Regola per una categoria personalizzata con la sua quota deducibile. */
+export function customRule(deducibile: number): CostRule {
+  return { deducibile: Math.min(1, Math.max(0, deducibile)), ivaDetraibile: deducibile > 0 ? 1 : 0, ivaPredefinita: 22, nota: "Categoria personalizzata." };
+}
+
 export function costRule(category: string): CostRule {
   return COST_RULES[category] ?? UNKNOWN_RULE;
 }
@@ -92,7 +97,7 @@ export interface OrdinarioTotals {
 }
 
 /** Ricavi, costi deducibili e IVA di un insieme di movimenti. */
-export function ordinarioTotals(movements: Movement[]): OrdinarioTotals {
+export function ordinarioTotals(movements: Movement[], custom: Record<string, number> = {}): OrdinarioTotals {
   const t: OrdinarioTotals = { ricavi: 0, costiDeducibili: 0, ivaVendite: 0, ivaAcquistiDetraibile: 0 };
   for (const m of movements) {
     const { netto, iva } = splitIva(m.amount, m.iva ?? 0);
@@ -101,7 +106,7 @@ export function ordinarioTotals(movements: Movement[]): OrdinarioTotals {
       t.ivaVendite += iva;
       continue;
     }
-    const rule = costRule(m.category);
+    const rule = COST_RULES[m.category] ? costRule(m.category) : m.category in custom ? customRule(custom[m.category]) : costRule(m.category);
     const ivaDetraibile = iva * rule.ivaDetraibile;
     // L'IVA che non si detrae diventa parte del costo.
     const costo = netto + (iva - ivaDetraibile);

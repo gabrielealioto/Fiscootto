@@ -1,15 +1,15 @@
 "use client";
 
-import { Inbox, Trash2 } from "lucide-react";
+import { Inbox, Pencil, Trash2 } from "lucide-react";
 import { useTransition } from "react";
 import { deleteTransaction } from "@/app/actions";
 import { categoryIcon } from "@/lib/categories";
 import { formatEur, type Transaction } from "@/lib/finance";
-import { AddButton } from "./QuickActions";
+import { AddButton, openEdit } from "./QuickActions";
 
 const dayFmt = new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 
-export function TransactionList({ transactions }: { transactions: Transaction[] }) {
+export function TransactionList({ transactions, showScope = false }: { transactions: Transaction[]; showScope?: boolean }) {
   const [pending, start] = useTransition();
 
   if (transactions.length === 0) {
@@ -42,12 +42,24 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
               const Icon = categoryIcon(t.category, t.kind);
               const isIn = t.kind === "entrata";
               return (
-                <div key={t.id} className={`tx ${isIn ? "tx-in kind-in" : "kind-out"}`}>
+                <div
+                  key={t.id}
+                  className={`tx tx-click ${isIn ? "tx-in kind-in" : "kind-out"}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openEdit(t)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") openEdit(t);
+                  }}
+                >
                   <span className="tx-icon" style={{ background: "var(--k-soft)", color: "var(--k-ink)" }}>
                     <Icon size={19} />
                   </span>
                   <div style={{ minWidth: 0 }}>
-                    <div className="tx-title">{t.description || t.category}</div>
+                    <div className="tx-title">
+                      {showScope && <span className={`scope-chip ${t.scope === "life" ? "life" : "work"}`}>{t.scope === "life" ? "Life" : "Work"}</span>}
+                      {t.description || t.category}
+                    </div>
                     <div className="tx-meta">
                       <span className="ktag" style={{ fontWeight: 550, color: "var(--subtle)" }}>
                         {isIn ? "Entrata" : "Uscita"}
@@ -64,7 +76,8 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
                     className="btn btn-ghost btn-icon"
                     disabled={pending}
                     aria-label={`Elimina ${t.description || "movimento"}`}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       if (confirm("Eliminare questo movimento?")) start(() => deleteTransaction(t.id));
                     }}
                   >

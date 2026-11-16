@@ -2,12 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { fetchTransactions } from "@/lib/data";
 import { atecoDigits, formatAteco } from "@/lib/ateco";
-import { fetchSettings } from "@/lib/data";
+import { fetchPlanning, fetchSettings, fetchTransactions } from "@/lib/data";
 import { GESTIONI, hasFixedContributions, type Gestione } from "@/lib/inps";
 import { costRule, incomeIva, IVA_RATES } from "@/lib/ordinario";
 import { dedupeKey, isIsoDate, round2, type Kind, type ParsedRow } from "@/lib/finance";
+import { matchRule, type Scope } from "@/lib/planning";
 import { createClient } from "@/lib/supabase/server";
 
 export interface ActionState {
@@ -24,7 +24,9 @@ async function requireUser() {
   return supabase;
 }
 
-type Row = ParsedRow & { iva: number };
+type Row = ParsedRow & { iva: number; scope: Scope };
+
+const parseScope = (v: unknown): Scope => (v === "life" ? "life" : "work");
 
 const validIva = (v: unknown) => ((IVA_RATES as readonly number[]).includes(Number(v)) ? Number(v) : null);
 
@@ -45,8 +47,8 @@ function cleanRow(r: Partial<ParsedRow>): ParsedRow | null {
   };
 }
 
-export async function addTransaction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  const supabase = await requireUser();
+/** Legge e valida il modulo di un movimento (nuovo o modificato). */
+async function rowFromForm(supabase: Awaited<ReturnType<typeof requireUser>>, form: FormData): Promise<Row | string> {
   const raw = String(form.get("amount") ?? "").replace(/\s/g, "");
   // Accetta sia "12,50" sia "12.50" e "1.234,56".
   const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
@@ -57,38 +59,68 @@ export async function addTransaction(_prev: ActionState, form: FormData): Promis
     category: String(form.get("category") ?? ""),
     description: String(form.get("description") ?? ""),
   });
-  if (!clean) return { ok: false, message: "Controlla data e importo (maggiore di zero)." };
+  if (!clean) return "Controlla data e importo (maggiore di zero).";
+  const scope = parseScope(form.get("scope"));
   const { regime } = await fetchSettings(supabase);
-  const ordinario = regime === "ordinario";
+  // L'IVA conta solo per i movimenti di lavoro in regime ordinario.
+  const ordinario = regime === "ordinario" && scope === "work";
   const iva = ordinario ? (validIva(form.get("iva")) ?? defaultIva(clean.kind, clean.category, true)) : 0;
-  const row: Row = { ...clean, iva };
+  return { ...clean, iva, scope };
+}
 
+export async function addTransaction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const supabase = await requireUser();
+  const row = await rowFromForm(supabase, form);
+  if (typeof row === "string") return { ok: false, message: row };
   const { error } = await supabase.from("transactions").insert(row);
   if (error) return { ok: false, message: error.message };
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   return { ok: true, message: "Movimento salvato." };
+}
+
+export async function updateTransaction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const supabase = await requireUser();
+  const id = String(form.get("id") ?? "");
+  if (!id) return { ok: false, message: "Movimento non trovato." };
+  const row = await rowFromForm(supabase, form);
+  if (typeof row === "string") return { ok: false, message: row };
+  const { error } = await supabase.from("transactions").update(row).eq("id", id);
+  if (error) return { ok: false, message: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Movimento aggiornato." };
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
   const supabase = await requireUser();
   await supabase.from("transactions").delete().eq("id", id);
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
 
 const MAX_IMPORT = 5000;
 
-export async function importTransactions(rows: ParsedRow[]): Promise<ActionState & { inserted?: number; skipped?: number }> {
+export async function importTransactions(
+  rows: ParsedRow[],
+  scopeInput: Scope = "work",
+): Promise<ActionState & { inserted?: number; skipped?: number; categorized?: number }> {
   const supabase = await requireUser();
   if (!Array.isArray(rows) || rows.length === 0) return { ok: false, message: "Nessuna riga da importare." };
   if (rows.length > MAX_IMPORT) return { ok: false, message: `Massimo ${MAX_IMPORT} righe per import.` };
 
-  const { regime } = await fetchSettings(supabase);
-  const ordinario = regime === "ordinario";
+  const scope = parseScope(scopeInput);
+  const [{ regime }, { rules }] = await Promise.all([fetchSettings(supabase), fetchPlanning(supabase)]);
+  let categorized = 0;
+  // Le regole automatiche scelgono categoria e ambito quando il CSV non indica la categoria.
   // Il CSV della banca non dice l'IVA: nel regime ordinario si propone quella tipica della categoria.
   const clean: Row[] = rows
     .map(cleanRow)
     .filter((r): r is ParsedRow => r !== null)
-    .map((r) => ({ ...r, iva: defaultIva(r.kind, r.category, ordinario) }));
+    .map((r) => {
+      const rule = r.category === "Fatture" || r.category === "Altro" ? matchRule(r.description, r.kind, rules) : null;
+      if (rule) categorized++;
+      const rowScope = rule?.scope ?? scope;
+      const category = rule?.category ?? (rowScope === "life" && r.category === "Fatture" ? "Altro" : r.category);
+      return { ...r, category, scope: rowScope, iva: rowScope === "work" ? defaultIva(r.kind, category, regime === "ordinario") : 0 };
+    });
   if (clean.length === 0) return { ok: false, message: "Nessuna riga valida." };
 
   // Salta i movimenti già presenti (stessa data, tipo, importo e descrizione):
@@ -113,13 +145,14 @@ export async function importTransactions(rows: ParsedRow[]): Promise<ActionState
     const { error } = await supabase.from("transactions").insert(fresh.slice(i, i + 500));
     if (error) return { ok: false, message: `Import interrotto: ${error.message}`, inserted: i };
   }
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   const skipped = rows.length - fresh.length;
   return {
     ok: true,
     inserted: fresh.length,
     skipped,
-    message: `Importati ${fresh.length} movimenti${skipped ? `, ${skipped} saltati (già presenti o non validi)` : ""}.`,
+    categorized,
+    message: `Importati ${fresh.length} movimenti${categorized ? `, ${categorized} categorizzati dalle tue regole` : ""}${skipped ? `, ${skipped} saltati (già presenti o non validi)` : ""}.`,
   };
 }
 

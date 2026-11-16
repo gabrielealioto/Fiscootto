@@ -5,7 +5,7 @@ import { Logo } from "@/components/Logo";
 import { SidebarNav, TabBar } from "@/components/Nav";
 import { InstallButton, ServiceWorkerRegister } from "@/components/Pwa";
 import { QuickActionsHost } from "@/components/QuickActions";
-import { fetchSettings } from "@/lib/data";
+import { fetchPlanning, fetchSettings } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
 
@@ -36,7 +36,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const regime = user ? (await fetchSettings(supabase)).regime ?? "forfettario" : "forfettario";
+  const [settings, planning] = user ? await Promise.all([fetchSettings(supabase), fetchPlanning(supabase)]) : [null, null];
+  const regime = settings?.regime ?? "forfettario";
 
   return (
     <html lang="it">
@@ -76,7 +77,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {children}
             </main>
             <TabBar />
-            <QuickActionsHost regime={regime} />
+            <QuickActionsHost
+              regime={regime}
+              aiEnabled={!!process.env.ANTHROPIC_API_KEY}
+              categories={planning?.categories ?? []}
+              rules={planning?.rules ?? []}
+            />
           </div>
         ) : (
           children

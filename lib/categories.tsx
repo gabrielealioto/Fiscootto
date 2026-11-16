@@ -1,4 +1,15 @@
 import {
+  Bus,
+  Coffee,
+  Gift,
+  HandCoins,
+  HeartPulse,
+  House,
+  Popcorn,
+  Shirt,
+  ShoppingBasket,
+  Tv,
+  Zap,
   Banknote,
   Boxes,
   Briefcase,
@@ -37,6 +48,17 @@ const ICONS: Record<string, LucideIcon> = {
   Commercialista: Calculator,
   "Tasse e contributi": Landmark,
   Banca: Banknote,
+  "Stipendio e prelievi": HandCoins,
+  Regali: Gift,
+  "Casa e affitto": House,
+  Bollette: Zap,
+  "Spesa alimentare": ShoppingBasket,
+  "Ristoranti e bar": Coffee,
+  Svago: Popcorn,
+  Salute: HeartPulse,
+  "Trasporti personali": Bus,
+  Abbigliamento: Shirt,
+  "Abbonamenti personali": Tv,
 };
 
 /** Icona della categoria; per le categorie sconosciute un'icona generica per tipo. */

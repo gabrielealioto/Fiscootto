@@ -5,7 +5,12 @@ Controller finanziario per freelance in **regime forfettario**: registri entrate
 ## Funzioni
 
 - **Accesso con link via email** (Supabase Auth). Ogni utente vede solo i propri dati (Row Level Security).
-- **Movimenti**: inserimento rapido (data, importo, categoria, descrizione) ed eliminazione.
+- **Work / Life**: ogni movimento è dell'attività (Work) o personale (Life), con categorie proprie (casa, bollette, spesa, svago…). La dashboard ha la vista Work, Life o Tutto; tasse, contributi, IVA e report usano solo i movimenti Work.
+- **Movimenti**: inserimento rapido, modifica (tocca un movimento) ed eliminazione.
+- **Foto dello scontrino**: con `ANTHROPIC_API_KEY`, Claude legge importo, data, negozio, categoria e IVA dalla foto (`/api/receipt`) e precompila il modulo; senza chiave il pulsante non compare.
+- **Categorie personalizzate e regole automatiche**: in *Impostazioni* aggiungi categorie Work o Life (con quota deducibile per il regime ordinario) e regole "se la descrizione contiene… allora categoria…", applicate all'import CSV e mentre scrivi.
+- **Pianifica**: budget mensili per categoria con avvisi all'80% e al superamento; spese e incassi ricorrenti (abbonamenti, bollette, affitto) con scadenze, pulsante "Pagata" che registra il movimento e sposta la scadenza; obiettivi di risparmio con traguardo, data e quota mensile necessaria.
+- **Avvisi nell'app**: budget, scadenze passate o vicine e obiettivi in ritardo compaiono in cima alla dashboard e in *Pianifica*.
 - **Import CSV**: riconosce `data`, `descrizione`, `importo` (negativo = uscita) oppure le colonne separate `entrate`/`uscite`, più `categoria`. Accetta separatore `;` o `,`, importi nel formato italiano (`1.234,56`) e date `gg/mm/aaaa`. Salta le righe introduttive dell'estratto conto e i movimenti già importati, così si può ricaricare lo stesso file senza duplicati.
 - **Dashboard** per giorno, settimana (da lunedì) o mese, con navigazione tra i periodi. Ogni voce ha un colore fisso in tutta l'app (entrate blu, uscite arancio, profitti verde acqua, tasse magenta, scelti per essere distinguibili anche da chi è daltonico): entrate, uscite, utile con la variazione rispetto al periodo precedente, grafico degli ultimi 6 periodi, uscite per categoria.
 - **Codice ATECO**: inserito in *Impostazioni*, imposta da solo il coefficiente di redditività secondo la tabella del forfettario (per i codici del commercio, cambiati con ATECO 2025, chiede di scegliere il gruppo). Il coefficiente resta modificabile.
@@ -43,6 +48,9 @@ lib/finance.ts           calcoli (periodi, aggregati, tasse, parser CSV) + test
 lib/ateco.ts             codice ATECO → coefficiente di redditività + test
 lib/inps.ts              gestioni INPS 2026 e calcolo dei contributi + test
 lib/ordinario.ts         regime ordinario: IVA, deducibilità, IRPEF 2026 + test
+lib/planning.ts          Work/Life, regole, ricorrenze, budget, obiettivi, avvisi + test
+app/pianifica/           budget, ricorrenti e obiettivi
+app/api/receipt/         lettura degli scontrini con Claude
 lib/report.ts            prompt del report + test
 lib/data.ts              lettura movimenti e impostazioni da Supabase
 lib/supabase/            client Supabase (server, browser, middleware)
@@ -53,7 +61,7 @@ supabase/migrations/     schema SQL con RLS
 
 ## Avvio in locale
 
-1. **Supabase**: crea un progetto, poi apri *SQL Editor* ed esegui in ordine i file di `supabase/migrations/` (`0001_init.sql`, `0002_ateco.sql`, `0003_gestione_inps.sql`, `0004_regime_ordinario.sql`).
+1. **Supabase**: crea un progetto, poi apri *SQL Editor* ed esegui in ordine i file di `supabase/migrations/` (`0001_init.sql`, `0002_ateco.sql`, `0003_gestione_inps.sql`, `0004_regime_ordinario.sql`, `0005_pianificazione.sql`, `0006_ambito_work_life.sql`).
    In *Authentication → URL Configuration* aggiungi `http://localhost:3000/auth/callback` (e poi l'URL di produzione) tra i Redirect URL.
 2. **Variabili d'ambiente**: copia `.env.example` in `.env.local` e compila URL e chiave anon di Supabase e, se vuoi il report scritto dall'AI, la chiave `ANTHROPIC_API_KEY` (facoltativa).
 3. Avvia:
